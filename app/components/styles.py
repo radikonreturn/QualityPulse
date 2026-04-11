@@ -11,6 +11,7 @@ _CSS = """
 /* ── Global ── */
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif !important;
+    color: var(--text-color) !important;
 }
 
 /* ── Sidebar ── */
@@ -47,7 +48,7 @@ html, body, [class*="css"] {
 
 /* ── Main content ── */
 [data-testid="stAppViewContainer"] > .main {
-    background: #f0f2f5;
+    background: var(--background-color);
 }
 .block-container {
     padding-top: 1.5rem !important;
@@ -57,8 +58,8 @@ html, body, [class*="css"] {
 
 /* ── Metric cards override ── */
 [data-testid="stMetric"] {
-    background: #ffffff;
-    border: 1px solid #e8ecf0;
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(128,128,128,0.2);
     border-radius: 12px;
     padding: 1rem 1.2rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -73,12 +74,10 @@ html, body, [class*="css"] {
     font-weight: 600 !important;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #6b7280 !important;
 }
 [data-testid="stMetricValue"] {
     font-size: 2rem !important;
     font-weight: 700 !important;
-    color: #1a1a2e !important;
 }
 [data-testid="stMetricDelta"] {
     font-size: 0.82rem !important;
@@ -94,11 +93,11 @@ html, body, [class*="css"] {
 .section-header {
     font-size: 1.1rem;
     font-weight: 700;
-    color: #1a1a2e;
+    color: var(--text-color);
     padding: 0.4rem 0 0.4rem 0.8rem;
     border-left: 4px solid #4f8ef7;
     margin: 1.2rem 0 0.8rem;
-    background: linear-gradient(90deg, rgba(79,142,247,0.06) 0%, transparent 100%);
+    background: linear-gradient(90deg, rgba(79,142,247,0.15) 0%, transparent 100%);
     border-radius: 0 6px 6px 0;
 }
 
@@ -116,9 +115,9 @@ html, body, [class*="css"] {
 
 /* ── Expanders ── */
 [data-testid="stExpander"] {
-    border: 1px solid #e8ecf0;
+    border: 1px solid rgba(128,128,128,0.2);
     border-radius: 10px;
-    background: #ffffff;
+    background: var(--secondary-background-color);
 }
 
 /* ── Buttons ── */
@@ -141,13 +140,14 @@ html, body, [class*="css"] {
 .page-title {
     font-size: 1.8rem;
     font-weight: 800;
-    color: #1a1a2e;
+    color: var(--text-color);
     margin-bottom: 0.2rem;
     letter-spacing: -0.02em;
 }
 .page-subtitle {
     font-size: 0.9rem;
-    color: #6b7280;
+    color: var(--text-color);
+    opacity: 0.7;
     margin-bottom: 1.5rem;
 }
 

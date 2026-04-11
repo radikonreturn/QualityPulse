@@ -20,7 +20,7 @@ from components.icons import SPC, ALERT, CHECK, SUMMARY, PLUS, SAVE, get_svg
 
 def show():
     inject_css()
-    page_header(f"{get_svg(SPC, size=32)} SPC Kontrol Grafiği", "İstatistiksel süreç kontrolü — X-bar grafiği ve Nelson kuralları")
+    page_header(f"{get_svg(SPC, size=32)} SPC Kontrol Grafiği", "İstatistiksel süreç kontrolü ve Nelson kuralları")
 
     # ── Controls ─────────────────────────────────────────────────────────────
     points = get_measurement_points()
@@ -28,12 +28,12 @@ def show():
         st.warning("Henüz ölçüm verisi yok. Önce veri tabanını seed.py ile doldurun.")
         return
 
-    section_header("Veri Seçimi")
-    col_pt, col_n = st.columns([2, 1])
-    with col_pt:
-        selected_point = st.selectbox("Ölçüm Noktası", options=points, key="spc_point")
-    with col_n:
-        n_obs = st.slider("Gözlem Sayısı", min_value=10, max_value=100, value=25, step=5, key="spc_n")
+    with st.container(border=True):
+        col_pt, col_n = st.columns([2, 1])
+        with col_pt:
+            selected_point = st.selectbox("Ölçüm Noktası", options=points)
+        with col_n:
+            n_obs = st.slider("Son Gözlem Sayısı", 10, 100, 25, 5)
 
     # ── Load measurements ────────────────────────────────────────────────────
     rows = get_measurements(measurement_point=selected_point, limit=n_obs)
@@ -41,119 +41,80 @@ def show():
         st.info("Seçilen ölçüm noktası için yeterli veri yok (min 5 kayıt).")
         return
 
-    values = [r["value"] for r in rows]
-    timestamps = [r["timestamp"] for r in rows]
-    usl = rows[0]["tolerance_upper"]
-    lsl = rows[0]["tolerance_lower"]
-    nominal = rows[0]["nominal"]
-
-    # Reverse so oldest → newest
-    values = list(reversed(values))
-    timestamps = list(reversed(timestamps))
+    values = list(reversed([r["value"] for r in rows]))
+    timestamps = list(reversed([r["timestamp"] for r in rows]))
+    usl, lsl, nominal = rows[0]["tolerance_upper"], rows[0]["tolerance_lower"], rows[0]["nominal"]
 
     # ── SPC Calculations ─────────────────────────────────────────────────────
     limits = calculate_control_limits(values)
-    cl  = limits["mean"]
-    ucl = limits["ucl"]
-    lcl = limits["lcl"]
+    cl, ucl, lcl = limits["mean"], limits["ucl"], limits["lcl"]
     ooc = get_ooc_indices(values, ucl, lcl, cl)
 
     # ── Chart ─────────────────────────────────────────────────────────────────
-    fig = spc_chart(
-        values=values,
-        timestamps=timestamps,
-        cl=cl, ucl=ucl, lcl=lcl,
-        usl=usl, lsl=lsl,
-        ooc_indices=ooc,
-        point_name=selected_point,
-    )
-    st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.container(border=True):
+        fig = spc_chart(values, timestamps, cl, ucl, lcl, usl, lsl, ooc, selected_point)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    # Nelson violations alert
-    if ooc:
-        st.markdown(f'<div style="background-color:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;gap:8px;">{get_svg(ALERT, color="#991b1b")} {len(ooc)} kontrol dışı nokta tespit edildi (Nelson Kural 1 & 2). İndeksler: {ooc[:10]}{"..." if len(ooc) > 10 else ""}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div style="background-color:#d1fae5;color:#065f46;padding:12px;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;gap:8px;">{get_svg(CHECK, color="#065f46")} Tüm noktalar kontrol sınırları içinde. Süreç kararlı görünüyor.</div>', unsafe_allow_html=True)
+        if ooc:
+            st.markdown(f"""
+            <div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
+                {get_svg(ALERT, color="#991b1b", size=20)} 
+                <b>{len(ooc)} Kontrol Dışı Nokta:</b> Nelson Kural ihlali tespit edildi.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style="background:#ecfdf5;color:#065f46;padding:12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
+                {get_svg(CHECK, color="#065f46", size=20)} 
+                <b>Süreç Kararlı:</b> Tüm noktalar kontrol sınırları içerisinde.
+            </div>
+            """, unsafe_allow_html=True)
 
     # ── Capability Summary ────────────────────────────────────────────────────
-    section_header("Yetenek Özeti")
-    cap = calculate_cpk(values, usl, lsl)
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    col1.metric("Cp",    f"{cap['cp']:.3f}")
-    col2.metric("Cpk",   f"{cap['cpk']:.3f}")
-    col3.metric("Ortalama",  f"{cap['mean']:.4f}")
-    col4.metric("σ",    f"{cap['sigma']:.4f}")
-    col5.metric("Min",  f"{min(values):.4f}")
-    col6.metric("Max",  f"{max(values):.4f}")
-
-    st.markdown(f"""
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:0.6rem;">
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>Nominal:</b> {nominal}
-        </span>
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>USL:</b> {usl}
-        </span>
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>LSL:</b> {lsl}
-        </span>
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>UCL:</b> {ucl:.4f}
-        </span>
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>LCL:</b> {lcl:.4f}
-        </span>
-        <span style="background:#f0f2f5;padding:4px 12px;border-radius:6px;font-size:0.82rem;">
-            <b>n:</b> {len(values)}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Cpk status
-    cpk_val = cap["cpk"]
-    if cpk_val >= 1.33:
-        st.markdown(f'<div style="background-color:#d1fae5;color:#065f46;padding:12px;border-radius:8px;margin-top:1rem;display:flex;align-items:center;gap:8px;">{get_svg(CHECK, color="#065f46")} Cpk = {cpk_val:.3f} — Süreç kapasiteli (≥ 1.33)</div>', unsafe_allow_html=True)
-    elif cpk_val >= 1.00:
-        st.markdown(f'<div style="background-color:#fef3c7;color:#92400e;padding:12px;border-radius:8px;margin-top:1rem;display:flex;align-items:center;gap:8px;">{get_svg(ALERT, color="#92400e")} Cpk = {cpk_val:.3f} — Sınırda kapasite (1.00–1.33)</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div style="background-color:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;margin-top:1rem;display:flex;align-items:center;gap:8px;">{get_svg(ALERT, color="#991b1b")} Cpk = {cpk_val:.3f} — Yetersiz kapasite (< 1.00). Acil iyileştirme gerekli!</div>', unsafe_allow_html=True)
-
-    # ── Recent Measurements Table ─────────────────────────────────────────────
-    with st.expander(f"Ölçüm Verisi Tablosu", expanded=False):
-        st.markdown(f"### {get_svg(SUMMARY)} Veri Listesi", unsafe_allow_html=True)
-        df = pd.DataFrame(rows[::-1])
-        df_disp = df[["timestamp", "line", "measurement_point", "value",
-                       "nominal", "tolerance_upper", "tolerance_lower"]].copy()
-        df_disp.columns = ["Zaman", "Hat", "Nokta", "Değer", "Nominal", "USL", "LSL"]
-        df_disp["Sapma"] = (df_disp["Değer"] - df_disp["Nominal"]).round(4)
-        st.dataframe(df_disp, hide_index=True, width='stretch')
-
-    # ── Add Measurement Form ──────────────────────────────────────────────────
     st.markdown("<br>", unsafe_allow_html=True)
-    section_header("Yeni Ölçüm Ekle")
-    with st.expander(f"Ölçüm Formu", expanded=False):
-        st.markdown(f"### {get_svg(PLUS)} Yeni Kayıt", unsafe_allow_html=True)
-        with st.form("add_measurement_form"):
-            fc1, fc2 = st.columns(2)
-            with fc1:
-                form_line = st.selectbox("Hat", options=get_lines(), key="form_line")
-                form_point = st.selectbox("Ölçüm Noktası", options=points, key="form_point")
-                form_value = st.number_input("Ölçüm Değeri", format="%.4f", key="form_value")
-            with fc2:
-                form_nominal = st.number_input("Nominal", format="%.4f", key="form_nominal")
-                form_usl = st.number_input("Üst Tolerans (USL)", format="%.4f", key="form_usl")
-                form_lsl = st.number_input("Alt Tolerans (LSL)", format="%.4f", key="form_lsl")
+    with st.container(border=True):
+        section_header("Süreç Yetenek Analizi")
+        cap = calculate_cpk(values, usl, lsl)
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Cp", f"{cap['cp']:.3f}")
+        c2.metric("Cpk", f"{cap['cpk']:.3f}", delta=f"{'Kapasiteli' if cap['cpk']>=1.33 else 'Yetersiz'}")
+        c3.metric("Ortalama", f"{cap['mean']:.4f}")
+        c4.metric("Standart Sapma", f"{cap['sigma']:.4f}")
 
-            submitted = st.form_submit_button("Kaydet", use_container_width=True)
-            if submitted:
-                if form_usl <= form_lsl:
-                    st.error("USL, LSL'den büyük olmalıdır.")
-                else:
-                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    insert_measurement(ts, form_line, form_point,
-                                        form_value, form_nominal, form_usl, form_lsl)
-                    st.success(f"Ölçüm kaydedildi: {form_point} = {form_value:.4f}")
+        # Specs row
+        st.markdown(f"""
+        <div style="display:flex;gap:12px;margin-top:15px;padding-top:15px;border-top:1px solid #f1f5f9;">
+            <div style="font-size:0.8rem;color:#64748b;"><b>USL:</b> {usl}</div>
+            <div style="font-size:0.8rem;color:#64748b;"><b>Nominal:</b> {nominal}</div>
+            <div style="font-size:0.8rem;color:#64748b;"><b>LSL:</b> {lsl}</div>
+            <div style="font-size:0.8rem;color:#64748b;margin-left:auto;"><b>N:</b> {len(values)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Tables & Forms ────────────────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_t, col_f = st.columns([1, 1])
+
+    with col_t:
+        with st.expander("Ölçüm Listesi", expanded=False, icon=":material/list:"):
+            df = pd.DataFrame(rows[::-1])
+            df_disp = df[["timestamp", "line", "value", "nominal"]].copy()
+            df_disp.columns = ["Zaman", "Hat", "Değer", "Nominal"]
+            st.dataframe(df_disp, hide_index=True, use_container_width=True)
+
+    with col_f:
+        with st.expander("Yeni Veri Girişi", expanded=False, icon=":material/add_circle:"):
+            with st.form("add_measurement_form", clear_on_submit=True):
+                f_line = st.selectbox("Hat", options=get_lines())
+                f_point = st.selectbox("Nokta", options=points)
+                f_val = st.number_input("Ölçüm", format="%.4f")
+                
+                if st.form_submit_button("Kaydet", use_container_width=True):
+                    insert_measurement(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                                       f_line, f_point, f_val, nominal, usl, lsl)
+                    st.toast("Veri başarıyla kaydedildi!")
                     st.rerun()
 
 

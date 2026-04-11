@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 block_cipher = None
-APP_DIR = Path("app")
+APP_DIR = Path(".")
 
 a = Analysis(
     [str(APP_DIR / "main.py")],
