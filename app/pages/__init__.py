@@ -1,0 +1,1 @@
+# QualityPulse — pages package
