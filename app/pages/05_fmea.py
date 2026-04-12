@@ -13,7 +13,7 @@ import pandas as pd
 from db.database import get_all_fmea, insert_fmea, update_fmea
 from components.styles import inject_css, page_header, section_header
 from components.charts import fmea_heatmap
-from components.icons import FMEA, CIRCLE_RED, CIRCLE_YELLOW, CIRCLE_GREEN, SUMMARY, PLUS, SAVE, get_svg
+from components.icons import FMEA, get_svg
 
 PROCESS_STEPS = [
     "Eritme", "Döküm", "Kalıp Kapatma", "Basınç Uygulama",

@@ -3,7 +3,6 @@ QualityPulse — KPI Card Component
 Renders styled HTML metric cards with icon, value, delta, and color variants.
 """
 
-import streamlit as st
 import streamlit.components.v1 as components
 from components.icons import DASHBOARD, CHECK, ALERT, get_svg
 

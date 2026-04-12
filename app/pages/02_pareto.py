@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 
 from db.database import get_defects, get_lines
 from components.styles import inject_css, page_header, section_header

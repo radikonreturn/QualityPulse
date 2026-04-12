@@ -8,7 +8,11 @@ Build command:
 """
 
 import sys
+import os
+import streamlit
 from pathlib import Path
+
+streamlit_path = os.path.dirname(streamlit.__file__)
 
 block_cipher = None
 APP_DIR = Path(".")
@@ -28,7 +32,7 @@ a = Analysis(
         (str(APP_DIR / "utils"),      "utils"),
         (str(APP_DIR / "db"),         "db"),
         # Streamlit static assets
-        ("venv/Lib/site-packages/streamlit", "streamlit"),
+        (streamlit_path, "streamlit"),
     ],
     hiddenimports=[
         "streamlit",

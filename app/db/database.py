@@ -4,7 +4,6 @@ Handles SQLite connection, schema initialization, and all query helpers.
 """
 
 import sqlite3
-import os
 from pathlib import Path
 
 # Always resolve quality.db relative to this file's location

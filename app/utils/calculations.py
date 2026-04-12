@@ -3,9 +3,7 @@ QualityPulse — Calculations
 OEE, scrap rate, monthly deltas, and other KPI helpers.
 """
 
-import statistics
 from datetime import datetime, timedelta
-from typing import List
 
 
 def calculate_oee(availability: float, performance: float, quality: float) -> float:

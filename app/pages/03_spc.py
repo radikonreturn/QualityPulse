@@ -15,7 +15,7 @@ from db.database import get_measurements, get_measurement_points, insert_measure
 from utils.spc_engine import calculate_control_limits, get_ooc_indices, calculate_cpk
 from components.styles import inject_css, page_header, section_header
 from components.charts import spc_chart
-from components.icons import SPC, ALERT, CHECK, SUMMARY, PLUS, SAVE, get_svg
+from components.icons import SPC, ALERT, CHECK, get_svg
 
 
 def show():

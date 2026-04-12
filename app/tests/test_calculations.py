@@ -1,6 +1,9 @@
-import pytest
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime, timedelta
-from app.utils.calculations import (
+from utils.calculations import (
     calculate_oee,
     calculate_scrap_rate,
     monthly_scrap_delta,

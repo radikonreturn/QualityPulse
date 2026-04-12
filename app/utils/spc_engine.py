@@ -3,7 +3,6 @@ QualityPulse — SPC Engine
 Statistical Process Control calculations and Nelson Rule detection.
 """
 
-import math
 import statistics
 from typing import List
 

@@ -1,5 +1,8 @@
-import pytest
-from app.utils.spc_engine import (
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.spc_engine import (
     calculate_control_limits,
     calculate_cpk,
     nelson_rule_1,

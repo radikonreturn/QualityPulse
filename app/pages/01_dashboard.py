@@ -13,10 +13,9 @@ from datetime import datetime, timedelta
 
 from db.database import get_defects, get_measurements, get_all_capa
 from utils.calculations import (
-    calculate_scrap_rate, monthly_scrap_delta, calculate_oee,
+    calculate_scrap_rate, calculate_oee,
     calculate_cpk_from_rows, get_30_day_trend
 )
-from utils.spc_engine import calculate_cpk
 from components.styles import inject_css, page_header, section_header
 from components.kpi_card import kpi_card, cpk_card
 from components.charts import scrap_trend_chart, defect_donut_chart, oee_gauge

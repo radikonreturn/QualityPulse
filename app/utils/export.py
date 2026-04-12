@@ -54,7 +54,7 @@ def format_excel_sheet(worksheet, auto_filter=True):
                 longest_line = max(len(line) for line in lines) if lines else 0
                 if longest_line > max_length:
                     max_length = longest_line
-            except:
+            except Exception:
                 pass
                 
         # Set max column width (cap at 60 to prevent absurdly wide columns)

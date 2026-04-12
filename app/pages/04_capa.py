@@ -9,13 +9,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import date
 
 from db.database import get_all_capa, insert_capa, update_capa_status
 from components.styles import inject_css, page_header, section_header
 from utils.calculations import count_overdue_capa
-from components.icons import CAPA, CIRCLE_RED, CIRCLE_YELLOW, CIRCLE_GREEN, ALERT, PLUS, SAVE, CHECK, get_svg
+from components.icons import CAPA, CIRCLE_RED, CIRCLE_YELLOW, CIRCLE_GREEN, get_svg
 
+
+import html
 
 STATUS_COLORS = {
     "Open":        (CIRCLE_RED, "#fef2f2", "#991b1b"),
@@ -127,12 +129,16 @@ def show():
             
             svg_icon, bg, fg = STATUS_COLORS.get(c["status"], (CIRCLE_RED, "#fff", "#000"))
             
+            safe_title = html.escape(str(c['title']))
+            safe_owner = html.escape(str(c['owner']))
+            safe_desc = html.escape(str(c['description'])).replace('\n', '<br>')
+            
             st.markdown(f"""
             <div style="background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         {get_svg(svg_icon, color=fg, size=24)}
-                        <h3 style="margin: 0; color: var(--text-color);">{c['title']}</h3>
+                        <h3 style="margin: 0; color: var(--text-color);">{safe_title}</h3>
                     </div>
                     <span style="background: {bg}; color: {fg}; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">
                         {c['status'].upper()}
@@ -141,17 +147,17 @@ def show():
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; font-size: 0.9rem;">
                     <div>
                         <div style="color: var(--text-color); opacity: 0.7; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; margin-bottom: 4px;">Sorumlu</div>
-                        <div style="color: var(--text-color);">{c['owner']}</div>
+                        <div style="color: var(--text-color);">{safe_owner}</div>
                     </div>
                     <div>
                         <div style="color: var(--text-color); opacity: 0.7; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; margin-bottom: 4px;">Vade Tarihi</div>
                         <div style="color: {'#ef4444' if c['due_date'] < date.today().strftime('%Y-%m-%d') and c['status'] != 'Closed' else 'var(--text-color)'}; font-weight: 600;">
-                            {c['due_date']} {f' (GECİKMİŞ)' if c['due_date'] < date.today().strftime('%Y-%m-%d') and c['status'] != 'Closed' else ''}
+                            {c['due_date']} {' (GECİKMİŞ)' if c['due_date'] < date.today().strftime('%Y-%m-%d') and c['status'] != 'Closed' else ''}
                         </div>
                     </div>
                     <div style="grid-column: span 2;">
                         <div style="color: var(--text-color); opacity: 0.7; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; margin-bottom: 4px;">Açıklama</div>
-                        <div style="color: var(--text-color); line-height: 1.5;">{c['description']}</div>
+                        <div style="color: var(--text-color); line-height: 1.5;">{safe_desc}</div>
                     </div>
                 </div>
             </div>

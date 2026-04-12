@@ -8,7 +8,6 @@ import subprocess
 import sys
 import os
 import time
-import threading
 import urllib.request
 import urllib.error
 

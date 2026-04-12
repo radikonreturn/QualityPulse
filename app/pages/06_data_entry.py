@@ -6,20 +6,22 @@ All four entry types in one place with live feedback and smart defaults.
 
 import sys
 import os
+import json
+import base64
+import pandas as pd
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import streamlit as st
 import streamlit.components.v1 as components
-import pandas as pd
 from datetime import datetime, date, timedelta
-import statistics
 
 from db.database import (
     insert_defect, insert_measurement, insert_capa, insert_fmea,
     get_lines, get_measurement_points,
 )
 from components.styles import inject_css, page_header, section_header
-from components.icons import get_svg, PENCIL, RULER, CALENDAR, FACTORY, BOX, MAP_PIN, USER, SEARCH, SHIELD, TREND_UP, REFRESH, SUN, MOON, CLOCK, WRENCH, CHECK, CIRCLE_GREEN, CIRCLE_YELLOW, CIRCLE_RED, ALERT
+from components.icons import get_svg, PENCIL, RULER, SEARCH, SHIELD, TREND_UP, CLOCK, WRENCH
 # ── Constants ─────────────────────────────────────────────────────────────────
 DEFECT_TYPES = [
     "Boyutsal Sapma", "Yüzey Hatası", "Gözeneklilik",
@@ -42,17 +44,35 @@ PROCESS_STEPS = [
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _shift_now() -> str:
-    """Auto-detect current shift from current hour."""
+DEFAULT_SHIFTS = [
+    {"name": "A", "label": "A Vardiyası", "start": 6,  "end": 14, "active": True},
+    {"name": "B", "label": "B Vardiyası", "start": 14, "end": 22, "active": True},
+    {"name": "C", "label": "C Vardiyası", "start": 22, "end": 6,  "active": True},
+]
+
+def _shift_now(shift_cfg: list | None = None) -> str:
+    """Auto-detect current shift from current hour using configured schedule."""
     h = datetime.now().hour
-    if 6 <= h < 14:   return "A"
-    elif 14 <= h < 22: return "B"
-    else:              return "C"
+    schedules = shift_cfg if shift_cfg else DEFAULT_SHIFTS
+    active = [s for s in schedules if s.get("active", True)]
+    for s in active:
+        start, end = s["start"], s["end"]
+        if start < end:  # Normal span e.g. 06–14
+            if start <= h < end:
+                return s["name"]
+        else:  # Overnight span e.g. 22–06
+            if h >= start or h < end:
+                return s["name"]
+    # Fallback: return first active shift
+    return active[0]["name"] if active else "A"
 
 def _rpn_badge(rpn: int) -> tuple[str, str, str]:
-    if rpn > 200:   return "#fee2e2", "#991b1b", "🔴 YÜKSEK"
-    elif rpn >= 100: return "#fef3c7", "#92400e", "🟡 ORTA"
-    else:            return "#d1fae5", "#065f46", "🟢 DÜŞÜK"
+    if rpn > 200:
+        return "#fee2e2", "#991b1b", "🔴 YÜKSEK"
+    elif rpn >= 100:
+        return "#fef3c7", "#92400e", "🟡 ORTA"
+    else:
+        return "#d1fae5", "#065f46", "🟢 DÜŞÜK"
 
 def _status_card(bg: str, fg: str, label: str, value: str, sub: str = "") -> str:
     return f"""<!DOCTYPE html><html><head>
@@ -97,11 +117,29 @@ def show():
     inject_css()
     page_header(f"{get_svg(PENCIL, size=32)} Veri Girişi", "Kalite mühendisi veri giriş merkezi — hata, ölçüm, CAPA ve FMEA")
 
+    if "qp_config" not in st.session_state:
+        st.session_state.qp_config = {
+            "company": {"name": "", "sector": "Otomotiv", "facility": "", "city": "", "employees": 0, "qe": ""},
+            "lines": [{"name": "Hat-1", "shifts": 3, "target": 100}, {"name": "Hat-2", "shifts": 3, "target": 100}],
+            "quality": {
+                "defects": DEFECT_TYPES.copy(),
+                "scrap_target": 2.0,
+                "oee_target": 85.0,
+                "complaint_target": 0
+            },
+            "spc_points": [{"point": r[0], "nom": r[1], "usl": r[2], "lsl": r[3]} for r in MEASUREMENT_POINTS_DEFAULT],
+            "shifts": [s.copy() for s in DEFAULT_SHIFTS],
+        }
+    cfg = st.session_state.qp_config
+    # Ensure shift config key exists for older session states
+    if "shifts" not in cfg:
+        cfg["shifts"] = [s.copy() for s in DEFAULT_SHIFTS]
+
     # ── Shift Info Banner ─────────────────────────────────────────────────────
-    cur_shift = _shift_now()
-    shift_label = {"A": "A Vardiyası (06:00–14:00)",
-                   "B": "B Vardiyası (14:00–22:00)",
-                   "C": "C Vardiyası (22:00–06:00)"}[cur_shift]
+    shift_schedules = cfg.get("shifts", DEFAULT_SHIFTS)
+    cur_shift = _shift_now(shift_schedules)
+    active_shift_cfg = next((s for s in shift_schedules if s["name"] == cur_shift), DEFAULT_SHIFTS[0])
+    shift_label = f"{active_shift_cfg['label']} ({active_shift_cfg['start']:02d}:00–{active_shift_cfg['end']:02d}:00)"
     st.markdown(
         f'<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);'
         f'color:#e0e0e0;padding:10px 20px;border-radius:10px;'
@@ -115,7 +153,8 @@ def show():
     )
 
     # ── Tabs ─────────────────────────────────────────────────────────────────
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab_settings, tab1, tab2, tab3, tab4 = st.tabs([
+        "Şirket Bilgisi",
         "Hata Kaydı",
         "Ölçüm Girişi",
         "CAPA Oluştur",
@@ -123,11 +162,191 @@ def show():
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
+    # TAB SETTINGS — COMPANY CONFIG
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_settings:
+        st.markdown("<br>", unsafe_allow_html=True)
+        left_s, right_s = st.columns([1, 1], gap="large")
+        
+        with left_s:
+            section_header("Section 1 — Company Info")
+            c_name = st.text_input("Firma Adı / Company Name *", value=cfg["company"]["name"])
+            sectors = ["Otomotiv", "Havacılık", "Elektronik", "Gıda", "Metal Döküm", "Tekstil", "Plastik", "Kimya", "Diğer"]
+            c_sect = st.selectbox("Sektör / Sector", sectors, index=sectors.index(cfg["company"]["sector"]) if cfg["company"]["sector"] in sectors else 0)
+            c_fac = st.text_input("Tesis Adı / Facility Name", value=cfg["company"]["facility"])
+            c_city = st.text_input("Şehir / City", value=cfg["company"]["city"])
+            c_emp = st.number_input("Çalışan Sayısı / Employee Count", min_value=0, value=cfg["company"]["employees"], step=10)
+            c_qe = st.text_input("Kalite Mühendisi / Quality Engineer", value=cfg["company"]["qe"])
+            
+            uploaded_logo = st.file_uploader("Firma Logosu / Logo", type=["png", "jpg", "jpeg", "svg"])
+            if uploaded_logo:
+                b64 = base64.b64encode(uploaded_logo.read()).decode()
+                ext = uploaded_logo.name.split('.')[-1].lower()
+                mime = f"image/{ext}" if ext != 'svg' else "image/svg+xml"
+                st.markdown(f'<img src="data:{mime};base64,{b64}" width="150" style="border-radius:10px;">', unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            section_header("Section 2 — Production Lines")
+            if "temp_lines" not in st.session_state:
+                st.session_state.temp_lines = cfg["lines"].copy()
+            
+            for i, line in enumerate(st.session_state.temp_lines):
+                lc1, lc2, lc3, lc4 = left_s.columns([3, 2, 2, 1])
+                line["name"] = lc1.text_input("Hat Adı", value=line.get("name",""), key=f"tl_name_{i}", label_visibility="collapsed")
+                line["shifts"] = lc2.selectbox("Vardiya", [1, 2, 3], index=[1,2,3].index(line.get("shifts", 3)), key=f"tl_sh_{i}", label_visibility="collapsed")
+                line["target"] = lc3.number_input("Hedef", min_value=1, value=line.get("target",100), step=10, key=f"tl_tgt_{i}", label_visibility="collapsed")
+                if lc4.button("Sil", key=f"tl_del_{i}"):
+                    st.session_state.temp_lines.pop(i)
+                    st.rerun()
+            
+            if len(st.session_state.temp_lines) < 10:
+                if left_s.button("Hat Ekle / Add Line"):
+                    st.session_state.temp_lines.append({"name": f"Yeni Hat", "shifts": 3, "target": 100})
+                    st.rerun()
+
+        with right_s:
+            section_header("Section 3 — Quality Parameters")
+            if "temp_defects" not in st.session_state:
+                st.session_state.temp_defects = cfg["quality"]["defects"].copy()
+            
+            def add_temp_defect():
+                val = st.session_state.fe_new_dfct.strip()
+                if val and val not in st.session_state.temp_defects:
+                    st.session_state.temp_defects.append(val)
+                st.session_state.fe_new_dfct = ""
+
+            st.text_input("Yeni Hata Türü Ekle (Type & Enter)", key="fe_new_dfct", on_change=add_temp_defect)
+            sel_defects = st.multiselect("Hata Türleri / Defect Types", st.session_state.temp_defects, default=st.session_state.temp_defects, key="ms_defects")
+            st.session_state.temp_defects = sel_defects
+            
+            q_scrap = st.slider("Hedef Fire Oranı / Scrap Rate Target (%)", min_value=0.5, max_value=10.0, value=float(cfg["quality"]["scrap_target"]), step=0.1)
+            q_oee = st.slider("Hedef OEE / OEE Target (%)", min_value=60.0, max_value=99.0, value=float(cfg["quality"]["oee_target"]), step=0.5)
+            q_comp = st.number_input("Aylık Şikayet Hedefi / Monthly Complaint Target", min_value=0, value=cfg["quality"]["complaint_target"])
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            section_header("Section 4 — SPC Measurement Points")
+            if "temp_spc" not in st.session_state:
+                st.session_state.temp_spc = pd.DataFrame(cfg["spc_points"])
+                if not st.session_state.temp_spc.empty:
+                    st.session_state.temp_spc = st.session_state.temp_spc.rename(columns={"point": "Nokta Adı", "nom": "Nominal", "usl": "USL", "lsl": "LSL"})
+                else:
+                    st.session_state.temp_spc = pd.DataFrame(columns=["Nokta Adı", "Nominal", "USL", "LSL"])
+
+            spc_df = st.data_editor(
+                st.session_state.temp_spc,
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "Nokta Adı": st.column_config.TextColumn("Nokta Adı", required=True),
+                    "Nominal": st.column_config.NumberColumn("Nominal", format="%.3f"),
+                    "USL": st.column_config.NumberColumn("USL", format="%.3f"),
+                    "LSL": st.column_config.NumberColumn("LSL", format="%.3f"),
+                },
+                key="editor_spc"
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            section_header("Section 5 — Vardiya Yönetimi / Shift Management")
+
+            if "temp_shifts" not in st.session_state:
+                st.session_state.temp_shifts = cfg["shifts"].copy()
+
+            # Column headers
+            sh0, sh1, sh2, sh3, sh4, sh5 = right_s.columns([1.5, 2.5, 1.5, 1.5, 1.5, 1.5])
+            sh0.markdown("**Aktif**", unsafe_allow_html=True)
+            sh1.markdown("**Vardiya Adı**", unsafe_allow_html=True)
+            sh2.markdown("**Kısa Ad**", unsafe_allow_html=True)
+            sh3.markdown("**Başlangıç**", unsafe_allow_html=True)
+            sh4.markdown("**Bitiş**", unsafe_allow_html=True)
+            sh5.markdown("**Renk**", unsafe_allow_html=True)
+
+            SHIFT_COLORS = ["#4f8ef7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+            for i, shift in enumerate(st.session_state.temp_shifts):
+                sc0, sc1, sc2, sc3, sc4, sc5 = right_s.columns([1.5, 2.5, 1.5, 1.5, 1.5, 1.5])
+                shift["active"] = sc0.checkbox("", value=shift.get("active", True), key=f"ts_act_{i}", label_visibility="collapsed")
+                shift["label"] = sc1.text_input("Adı", value=shift.get("label", f"Vardiya {i+1}"), key=f"ts_lbl_{i}", label_visibility="collapsed")
+                shift["name"]  = sc2.text_input("Kısa", value=shift.get("name", str(i+1)), key=f"ts_nm_{i}", label_visibility="collapsed", max_chars=3)
+                shift["start"] = sc3.number_input("Baş", min_value=0, max_value=23, value=int(shift.get("start", 0)), key=f"ts_st_{i}", label_visibility="collapsed")
+                shift["end"]   = sc4.number_input("Bit", min_value=0, max_value=23, value=int(shift.get("end", 8)),  key=f"ts_en_{i}", label_visibility="collapsed")
+                current_color = shift.get("color", SHIFT_COLORS[i % len(SHIFT_COLORS)])
+                shift["color"] = sc5.color_picker("Renk", value=current_color, key=f"ts_col_{i}", label_visibility="collapsed")
+
+            col_add, col_del = right_s.columns(2)
+            if col_add.button("➕ Vardiya Ekle", key="shift_add", use_container_width=True):
+                next_n = len(st.session_state.temp_shifts) + 1
+                st.session_state.temp_shifts.append({
+                    "name": str(next_n), "label": f"Vardiya {next_n}",
+                    "start": 0, "end": 8, "active": True,
+                    "color": SHIFT_COLORS[next_n % len(SHIFT_COLORS)]
+                })
+                st.rerun()
+            if col_del.button("➖ Son Vardiyayı Sil", key="shift_del", disabled=len(st.session_state.temp_shifts) <= 1, use_container_width=True):
+                st.session_state.temp_shifts.pop()
+                st.rerun()
+
+            # Live preview of configured shift schedule
+            if st.session_state.temp_shifts:
+                st.markdown("**Vardiya Saatleri Önizleme:**")
+                timeline_html = '<div style="display:flex;gap:2px;border-radius:8px;overflow:hidden;height:28px;margin-top:4px;">'
+                for s in st.session_state.temp_shifts:
+                    if not s.get("active", True):
+                        continue
+                    start, end = int(s["start"]), int(s["end"])
+                    duration = (end - start) % 24 or 24
+                    pct = duration / 24 * 100
+                    color = s.get("color", "#4f8ef7")
+                    timeline_html += (
+                        f'<div style="flex:{pct:.1f};background:{color};display:flex;'
+                        f'align-items:center;justify-content:center;color:white;'
+                        f'font-size:0.72rem;font-weight:700;white-space:nowrap;padding:0 4px;" '
+                        f'title="{s["label"]}: {start:02d}:00–{end:02d}:00">'
+                        f'{s["name"]} {start:02d}–{end:02d}\'</div>'
+                    )
+                timeline_html += '</div>'
+                st.markdown(timeline_html, unsafe_allow_html=True)
+
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        if st.button("Ayarları Kaydet / Save Settings", type="primary", use_container_width=True, icon=":material/save:"):
+            if not c_name.strip():
+                st.error("Firma Adı zorunludur! / Company Name is required!")
+            else:
+                cfg["company"] = {
+                    "name": c_name.strip(), "sector": c_sect, "facility": c_fac.strip(),
+                    "city": c_city.strip(), "employees": c_emp, "qe": c_qe.strip()
+                }
+                cfg["lines"] = st.session_state.temp_lines
+                cfg["quality"] = {
+                    "defects": sel_defects, "scrap_target": q_scrap, "oee_target": q_oee, "complaint_target": q_comp
+                }
+                spc_points = []
+                for _, r in spc_df.iterrows():
+                    if r.get("Nokta Adı"):
+                        spc_points.append({
+                            "point": str(r["Nokta Adı"]),
+                            "nom": float(r["Nominal"]) if pd.notnull(r["Nominal"]) else 0.0,
+                            "usl": float(r["USL"]) if pd.notnull(r["USL"]) else 0.0,
+                            "lsl": float(r["LSL"]) if pd.notnull(r["LSL"]) else 0.0
+                        })
+                cfg["spc_points"] = spc_points
+                cfg["shifts"] = st.session_state.temp_shifts
+                st.session_state.qp_config = cfg
+                
+                json_cfg = json.dumps(cfg)
+                js = f"<script>localStorage.setItem('qualitypulse_config', '{json_cfg}');</script>"
+                components.html(js, height=0)
+                st.success("Ayarlar kaydedildi", icon="✅")
+                # Removed toast to use success box that won't disappear if page reloads layout too quickly
+
+    # ══════════════════════════════════════════════════════════════════════════
     # TAB 1 — DEFECT ENTRY
     # ══════════════════════════════════════════════════════════════════════════
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
-        lines = get_lines() or ["Hat-1", "Hat-2"]
+        lines = [l["name"] for l in cfg["lines"]] if cfg["lines"] else ["Hat-1"]
+        current_defects = cfg["quality"]["defects"] if cfg["quality"]["defects"] else DEFECT_TYPES
+        active_shifts = [s["name"] for s in cfg.get("shifts", DEFAULT_SHIFTS) if s.get("active", True)]
+        if not active_shifts:
+            active_shifts = ["A"]
 
         left, right = st.columns([3, 2], gap="large")
 
@@ -137,17 +356,15 @@ def show():
                 r1c1, r1c2, r1c3 = st.columns(3)
                 with r1c1:
                     d_date = st.date_input("Tarih", value=date.today(), key="d_date")
-                with r1c2:
-                    d_shift = st.selectbox(
-                        "Vardiya", SHIFTS,
-                        index=SHIFTS.index(cur_shift), key="d_shift"
-                    )
                 with r1c3:
                     d_line = st.selectbox("Hat", lines, key="d_line")
+                with r1c2:
+                    def_s = cur_shift if cur_shift in active_shifts else active_shifts[-1]
+                    d_shift = st.selectbox("Vardiya", active_shifts, index=active_shifts.index(def_s), key="d_shift_sel")
 
                 r2c1, r2c2 = st.columns(2)
                 with r2c1:
-                    d_type = st.selectbox("Hata Türü", DEFECT_TYPES, key="d_type")
+                    d_type = st.selectbox("Hata Türü", current_defects, key="d_type")
                 with r2c2:
                     d_qty = st.number_input(
                         "Hata Adedi", min_value=0, max_value=9999,
@@ -225,8 +442,9 @@ def show():
     # ══════════════════════════════════════════════════════════════════════════
     with tab2:
         st.markdown("<br>", unsafe_allow_html=True)
-        lines = get_lines() or ["Hat-1", "Hat-2"]
-        existing_points = get_measurement_points() or [r[0] for r in MEASUREMENT_POINTS_DEFAULT]
+        lines = [l["name"] for l in cfg["lines"]] if cfg["lines"] else ["Hat-1"]
+        existing_points = [p["point"] for p in cfg["spc_points"]] if cfg["spc_points"] else [r[0] for r in MEASUREMENT_POINTS_DEFAULT]
+        current_meta = {p["point"]: (p["point"], p["nom"], p["usl"], p["lsl"]) for p in cfg["spc_points"]} if cfg["spc_points"] else POINT_META
 
         left, right = st.columns([3, 2], gap="large")
 
@@ -240,7 +458,7 @@ def show():
                     m_point = st.selectbox("Ölçüm Noktası", existing_points, key="m_point")
 
                 # Auto-fill nominal/USL/LSL from known points
-                meta = POINT_META.get(m_point)
+                meta = current_meta.get(m_point)
                 nom_def  = meta[1] if meta else 0.0
                 usl_def  = meta[2] if meta else 0.0
                 lsl_def  = meta[3] if meta else 0.0

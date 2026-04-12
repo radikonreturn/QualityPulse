@@ -4,7 +4,6 @@ Polished Plotly charts with a modern, professional aesthetic.
 """
 
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 from typing import List, Optional
 
@@ -120,12 +119,13 @@ def defect_donut_chart(defects: list[dict]) -> go.Figure:
         hovertemplate="<b>%{label}</b><br>Adet: %{value}<br>Oran: %{percent}<extra></extra>",
     ))
     
+    _apply_defaults(fig, "Bu Ayki Hata Dağılımı", 320)
     fig.update_layout(
         showlegend=True,
-        legend=dict(orientation="v", x=1.0, y=0.5),
+        legend=dict(orientation="v", x=1.0, y=0.5, xanchor="left", yanchor="middle"),
+        margin=dict(r=120),
         annotations=[dict(text="Hata Türleri", x=0.5, y=0.5, font=dict(size=12, weight=600), showarrow=False)],
     )
-    _apply_defaults(fig, "Bu Ayki Hata Dağılımı", 320)
     return fig
 
 
@@ -134,7 +134,7 @@ def defect_donut_chart(defects: list[dict]) -> go.Figure:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def pareto_chart(defects: list[dict]) -> go.Figure:
-    """Pareto chart: rounded bars + cumulative line."""
+    """Pareto chart: modern vibrant bars + glowing cumulative line."""
     df = pd.DataFrame(defects)
     if df.empty:
         fig = go.Figure()
@@ -144,35 +144,62 @@ def pareto_chart(defects: list[dict]) -> go.Figure:
     agg = agg.sort_values("quantity", ascending=False).reset_index(drop=True)
     agg["cumulative_pct"] = agg["quantity"].cumsum() / agg["quantity"].sum() * 100
 
-    # Bars: Highlight vital few (80/20 rule)
-    colors = [PALETTE["primary"] if p <= 85 else "#e2e8f0" for p in agg["cumulative_pct"]]
+    # Bars: Highlight vital few (80/20 rule) with premium aesthetics
+    # Vital few: Glassy primary blue. Trivial many: Translucent muted slate.
+    colors = [
+        "rgba(59, 130, 246, 0.85)" if p <= 85 else "rgba(100, 116, 139, 0.15)"
+        for p in agg["cumulative_pct"]
+    ]
+    marker_line_color = [
+        "rgba(59, 130, 246, 1.0)" if p <= 85 else "rgba(100, 116, 139, 0.4)"
+        for p in agg["cumulative_pct"]
+    ]
 
     fig = go.Figure()
 
     fig.add_trace(go.Bar(
         x=agg["defect_type"], y=agg["quantity"],
         name="Hata Adedi",
-        marker=dict(color=colors, line=dict(color="#fff", width=0)),
+        marker=dict(
+            color=colors, 
+            line=dict(color=marker_line_color, width=1.5)
+        ),
+        text=agg["quantity"],
+        textposition="auto",
+        textfont=dict(family="Inter, sans-serif"),
         yaxis="y1",
         hovertemplate="<b>%{x}</b><br>Adet: %{y}<extra></extra>",
     ))
 
+    # Glow effect for the cumulative line
+    fig.add_trace(go.Scatter(
+        x=agg["defect_type"], y=agg["cumulative_pct"],
+        mode="lines",
+        name="Kümülatif % G",
+        line=dict(color="rgba(245, 158, 11, 0.25)", width=8, shape="spline"),
+        hoverinfo="skip",
+        showlegend=False,
+        yaxis="y2",
+    ))
+
+    # Actual cumulative percentage line
     fig.add_trace(go.Scatter(
         x=agg["defect_type"], y=agg["cumulative_pct"],
         name="Kümülatif %",
         mode="lines+markers",
-        line=dict(color=PALETTE["warning"], width=3),
-        marker=dict(size=8, color="white", line=dict(width=2, color=PALETTE["warning"])),
+        line=dict(color=PALETTE["warning"], width=3, shape="spline"),
+        marker=dict(size=9, color=PALETTE["warning"], line=dict(width=2, color="#ffffff")),
         yaxis="y2",
         hovertemplate="%{y:.1f}%<extra></extra>",
     ))
 
-    fig.update_layout(
-        yaxis=dict(title="Hata Adedi", showgrid=True),
-        yaxis2=dict(title="Kümülatif %", overlaying="y", side="right", range=[0, 105], ticksuffix="%"),
-        legend=dict(x=1, y=1.1, orientation="h", xanchor="right"),
-    )
     _apply_defaults(fig, "Hata Türleri Pareto Analizi", 420)
+    fig.update_layout(
+        yaxis=dict(title="", showgrid=True, gridcolor="rgba(128,128,128,0.1)"),
+        yaxis2=dict(title="", overlaying="y", side="right", range=[0, 105], ticksuffix="%", showgrid=False),
+        legend=dict(x=1, y=1.1, orientation="h", xanchor="right", yanchor="bottom"),
+        margin=dict(t=80),
+    )
     return fig
 
 
