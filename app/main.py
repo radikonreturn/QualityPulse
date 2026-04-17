@@ -1,100 +1,78 @@
-"""
-QualityPulse — Desktop Entry Point (main.py)
-Launches Streamlit in a background subprocess, polls until ready,
-then opens the pywebview window. Gracefully shuts down on window close.
-"""
-
-import subprocess
-import sys
 import os
-import time
-import urllib.request
-import urllib.error
+import sys
+import importlib
+from nicegui import ui
 
-import webview
-
-
-# ── Config ────────────────────────────────────────────────────────────────────
-PORT    = 8502
-URL     = f"http://localhost:{PORT}"
-TIMEOUT = 30  # seconds to wait for Streamlit to become ready
+# Ensure app directory is on path
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
 
+from db.database import init_db
+from db.seed import run as seed_run
 
-def _start_streamlit() -> subprocess.Popen:
-    """Spawn Streamlit as a subprocess."""
-    cmd = [
-        sys.executable, "-m", "streamlit", "run",
-        os.path.join(APP_DIR, "streamlit_app.py"),
-        "--server.port", str(PORT),
-        "--server.headless", "true",
-        "--server.fileWatcherType", "none",
-        "--browser.gatherUsageStats", "false",
-        "--server.enableCORS", "false",
-        "--server.enableXsrfProtection", "false",
-    ]
-    return subprocess.Popen(
-        cmd,
-        cwd=APP_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+# Initialize Database
+db_path = os.path.join(APP_DIR, "quality.db")
+init_db()
+
+# Improved Seeding logic: Check if database is actually empty
+def needs_seeding():
+    from db.database import get_defects
+    try:
+        defects = get_defects(limit=1)
+        return len(defects) == 0
+    except Exception:
+        return True
+
+if needs_seeding():
+    print("Database empty or missing. Running seed logic...")
+    seed_run()
+
+# Layout components
+from components.layout import frame
+from nicegui import app
+
+# Add static files for assets and user uploads
+UPLOAD_DIR = os.path.join(APP_DIR, 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+app.add_static_files('/assets', os.path.join(APP_DIR, 'assets'))
+app.add_static_files('/uploads', UPLOAD_DIR)
+
+# Import pages to register routes
+page_modules = [
+    "pages.dashboard",
+    "pages.pareto",
+    "pages.spc",
+    "pages.capa",
+    "pages.fmea",
+    "pages.data_entry",
+    "pages.data_export",
+]
+
+for mod in page_modules:
+    try:
+        importlib.import_module(mod)
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed to load page module {mod}. The application may be partially functional.")
+        print(f"Details: {e}")
+
+# Global Exception Handler for Stability
+def handle_exception(e: Exception):
+    print(f"UNHANDLED EXCEPTION: {e}")
+    ui.notify(f"An unexpected error occurred: {str(e)[:100]}...", type='negative', position='top')
+
+app.on_exception(handle_exception)
+
+if __name__ in {"__main__", "__mp_main__"}:
+    # Run the application
+    native_mode = os.getenv('QP_WEB_MODE', '0') != '1'
+    
+    ui.run(
+        title="QualityPulse — Intelligent Quality Management System",
+        favicon=os.path.join(APP_DIR, 'assets', 'icon.png'),
+        native=native_mode,
+        window_size=(1440, 900),
+        storage_secret="qp_secret_key_2026",
+        reload=False
     )
-
-
-def _wait_for_server(url: str, timeout: int) -> bool:
-    """Poll the Streamlit URL until it responds or timeout."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
-                if resp.status == 200:
-                    return True
-        except (urllib.error.URLError, OSError):
-            pass
-        time.sleep(0.5)
-    return False
-
-
-def main():
-    # 1 — Start Streamlit subprocess
-    proc = _start_streamlit()
-    print(f"[QualityPulse] Streamlit starting on {URL} …", flush=True)
-
-    # 2 — Wait until ready
-    if not _wait_for_server(URL, TIMEOUT):
-        proc.terminate()
-        print("[QualityPulse] ERROR: Streamlit did not start in time. Exiting.", flush=True)
-        sys.exit(1)
-
-    print("[QualityPulse] Streamlit ready. Opening window …", flush=True)
-
-    # 3 — Create pywebview window
-    window = webview.create_window(
-        title="QualityPulse — Quality Management System",
-        url=URL,
-        width=1280,
-        height=820,
-        resizable=True,
-        min_size=(1024, 700),
-        text_select=True,
-    )
-
-    def on_closed():
-        """Kill Streamlit when the window closes."""
-        print("[QualityPulse] Window closed. Shutting down …", flush=True)
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-        sys.exit(0)
-
-    window.events.closed += on_closed
-
-    # 4 — Start pywebview (blocking call)
-    webview.start(debug=False)
-
-
-if __name__ == "__main__":
-    main()

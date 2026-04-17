@@ -1,18 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-QualityPulse — PyInstaller Build Spec
+QualityPulse — PyInstaller Build Spec (NiceGUI Version)
 One-file executable, no console window.
 
-Build command:
-    pyinstaller build.spec
+Build command (run from app/ directory):
+    pyinstaller build.spec --clean --noconfirm
 """
 
 import sys
 import os
-import streamlit
+import nicegui
 from pathlib import Path
 
-streamlit_path = os.path.dirname(streamlit.__file__)
+nicegui_path = os.path.dirname(nicegui.__file__)
 
 block_cipher = None
 APP_DIR = Path(".")
@@ -22,39 +22,50 @@ a = Analysis(
     pathex=[str(APP_DIR)],
     binaries=[],
     datas=[
-        # Include the SQLite DB (will be created at runtime if missing)
-        (str(APP_DIR / "quality.db"), "."),
         # Assets
-        (str(APP_DIR / "assets"), "assets"),
+        (str(APP_DIR / "assets"),      "assets"),
         # App modules
-        (str(APP_DIR / "pages"),      "pages"),
-        (str(APP_DIR / "components"), "components"),
-        (str(APP_DIR / "utils"),      "utils"),
-        (str(APP_DIR / "db"),         "db"),
-        # Streamlit static assets
-        (streamlit_path, "streamlit"),
+        (str(APP_DIR / "pages"),       "pages"),
+        (str(APP_DIR / "components"),  "components"),
+        (str(APP_DIR / "utils"),       "utils"),
+        (str(APP_DIR / "db"),          "db"),
+        # NiceGUI static files
+        (nicegui_path,                 "nicegui"),
     ],
     hiddenimports=[
-        "streamlit",
-        "streamlit.web.cli",
-        "streamlit.runtime.scriptrunner.magic_funcs",
-        "webview",
-        "webview.platforms.edgechromium",
+        # NiceGUI internals
+        "nicegui",
+        "uvicorn.logging",
+        "uvicorn.loops",
+        "uvicorn.loops.auto",
+        "uvicorn.protocols",
+        "uvicorn.protocols.http",
+        "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.websockets",
+        "uvicorn.protocols.websockets.auto",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
+        "engineio.async_drivers.aiohttp",
+        # Data / charting
         "plotly",
         "plotly.express",
         "plotly.graph_objects",
+        "plotly.subplots",
         "pandas",
+        "numpy",
+        # Excel export
+        "openpyxl",
+        # DB / packaging
         "sqlite3",
-        "packaging.version",
-        "packaging.specifiers",
-        "packaging.requirements",
-        "altair",
-        "pyarrow",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["matplotlib", "numpy.testing", "IPython", "ipykernel"],
+    excludes=[
+        "matplotlib",
+        "IPython",
+        "ipykernel",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -77,12 +88,13 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=False,                  # no black terminal window
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(APP_DIR / "assets" / "icon.ico"),
-    onefile=True,
+    icon=str(APP_DIR / "assets" / "icon.ico"), # ensure this exists
+    onefile=True,                   # single .exe file
+    version_file=None,
 )

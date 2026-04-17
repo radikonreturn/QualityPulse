@@ -77,11 +77,11 @@ def scrap_trend_chart(trend_data: list[dict], threshold: float = 3.0) -> go.Figu
     fig.add_trace(go.Scatter(
         x=df["date"], y=df["scrap_rate"],
         mode="lines",
-        name="Hurda Oranı",
+        name="Scrap Rate",
         line=dict(color=PALETTE["primary"], width=3, shape="spline"),
         fill="tozeroy",
         fillcolor="rgba(59, 130, 246, 0.08)",
-        hovertemplate="<b>%{x}</b><br>Hurda: %{y:.2f}%<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Scrap: %{y:.2f}%<extra></extra>",
     ))
 
     # Threshold line
@@ -93,7 +93,7 @@ def scrap_trend_chart(trend_data: list[dict], threshold: float = 3.0) -> go.Figu
         annotation_font=dict(color=PALETTE["danger"], size=10),
     )
 
-    _apply_defaults(fig, "30 Günlük Hurda Oranı Trendi", height=320)
+    _apply_defaults(fig, "30-Day Scrap Rate Trend", height=320)
     fig.update_yaxes(ticksuffix="%")
     return fig
 
@@ -103,8 +103,8 @@ def defect_donut_chart(defects: list[dict]) -> go.Figure:
     df = pd.DataFrame(defects)
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="Veri yok", x=0.5, y=0.5, showarrow=False)
-        return _apply_defaults(fig, "Bu Ayki Hata Dağılımı", 320)
+        fig.add_annotation(text="No data", x=0.5, y=0.5, showarrow=False)
+        return _apply_defaults(fig, "Monthly Defect Breakdown", 320)
 
     agg = df.groupby("defect_type")["quantity"].sum().reset_index()
     # Refined palette
@@ -119,12 +119,12 @@ def defect_donut_chart(defects: list[dict]) -> go.Figure:
         hovertemplate="<b>%{label}</b><br>Adet: %{value}<br>Oran: %{percent}<extra></extra>",
     ))
     
-    _apply_defaults(fig, "Bu Ayki Hata Dağılımı", 320)
+    _apply_defaults(fig, "Monthly Defect Distribution", 320)
     fig.update_layout(
         showlegend=True,
         legend=dict(orientation="v", x=1.0, y=0.5, xanchor="left", yanchor="middle"),
         margin=dict(r=120),
-        annotations=[dict(text="Hata Türleri", x=0.5, y=0.5, font=dict(size=12, weight=600), showarrow=False)],
+        annotations=[dict(text="Defect Types", x=0.5, y=0.5, font=dict(size=12, weight=600), showarrow=False)],
     )
     return fig
 
@@ -138,7 +138,7 @@ def pareto_chart(defects: list[dict]) -> go.Figure:
     df = pd.DataFrame(defects)
     if df.empty:
         fig = go.Figure()
-        return _apply_defaults(fig, "Pareto Analizi", 420)
+        return _apply_defaults(fig, "Pareto Analysis", 420)
 
     agg = df.groupby("defect_type")["quantity"].sum().reset_index()
     agg = agg.sort_values("quantity", ascending=False).reset_index(drop=True)
@@ -159,7 +159,7 @@ def pareto_chart(defects: list[dict]) -> go.Figure:
 
     fig.add_trace(go.Bar(
         x=agg["defect_type"], y=agg["quantity"],
-        name="Hata Adedi",
+        name="Defect Count",
         marker=dict(
             color=colors, 
             line=dict(color=marker_line_color, width=1.5)
@@ -168,14 +168,14 @@ def pareto_chart(defects: list[dict]) -> go.Figure:
         textposition="auto",
         textfont=dict(family="Inter, sans-serif"),
         yaxis="y1",
-        hovertemplate="<b>%{x}</b><br>Adet: %{y}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Count: %{y}<extra></extra>",
     ))
 
     # Glow effect for the cumulative line
     fig.add_trace(go.Scatter(
         x=agg["defect_type"], y=agg["cumulative_pct"],
         mode="lines",
-        name="Kümülatif % G",
+        name="Cumulative % Glow",
         line=dict(color="rgba(245, 158, 11, 0.25)", width=8, shape="spline"),
         hoverinfo="skip",
         showlegend=False,
@@ -185,7 +185,7 @@ def pareto_chart(defects: list[dict]) -> go.Figure:
     # Actual cumulative percentage line
     fig.add_trace(go.Scatter(
         x=agg["defect_type"], y=agg["cumulative_pct"],
-        name="Kümülatif %",
+        name="Cumulative %",
         mode="lines+markers",
         line=dict(color=PALETTE["warning"], width=3, shape="spline"),
         marker=dict(size=9, color=PALETTE["warning"], line=dict(width=2, color="#ffffff")),
@@ -226,10 +226,10 @@ def spc_chart(
     fig.add_trace(go.Scatter(
         x=x_labels, y=values,
         mode="lines+markers",
-        name="Ölçüm",
+        name="Measurement",
         line=dict(color="#cbd5e1", width=1.5),
         marker=dict(size=6, color=PALETTE["primary"], line=dict(width=1, color="white")),
-        hovertemplate="<b>%{x}</b><br>Değer: %{y:.4f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Value: %{y:.4f}<extra></extra>",
     ))
 
     # Highlight violations
@@ -239,9 +239,9 @@ def spc_chart(
         fig.add_trace(go.Scatter(
             x=ooc_x, y=ooc_y,
             mode="markers",
-            name="Kontrol Dışı",
+            name="Out of Control",
             marker=dict(size=10, color=PALETTE["danger"], symbol="circle", line=dict(width=2, color="white")),
-            hovertemplate="<b>%{x}</b><br>Değer: %{y:.4f} <span style='color:red;'>⚠️</span><extra></extra>",
+            hovertemplate="<b>%{x}</b><br>Value: %{y:.4f} <span style='color:red;'>(!)</span><extra></extra>",
         ))
 
     # Add lines (CL, UCL, LCL)
@@ -261,7 +261,7 @@ def spc_chart(
         fig.add_hline(y=lsl, line_color="#94a3b8", line_width=1, line_dash="dot",
                        annotation_text=f"LSL {lsl}", annotation_position="top right")
 
-    _apply_defaults(fig, f"SPC Kontrol Grafiği: {point_name}", height=420)
+    _apply_defaults(fig, f"SPC Control Chart: {point_name}", height=420)
     fig.update_xaxes(tickangle=-45, nticks=10)
     return fig
 
@@ -276,8 +276,8 @@ def fmea_heatmap(fmea_rows: list[dict]) -> go.Figure:
         fig = go.Figure()
         return _apply_defaults(fig, "FMEA Risk Matrisi", 360)
 
-    sev_bands = [(1, 3, "Düşük (1-3)"), (4, 6, "Orta (4-6)"), (7, 10, "Yüksek (7-10)")]
-    occ_bands = [(1, 3, "Düşük (1-3)"), (4, 6, "Orta (4-6)"), (7, 10, "Yüksek (7-10)")]
+    sev_bands = [(1, 3, "Low (1-3)"), (4, 6, "Medium (4-6)"), (7, 10, "High (7-10)")]
+    occ_bands = [(1, 3, "Low (1-3)"), (4, 6, "Medium (4-6)"), (7, 10, "High (7-10)")]
 
     z, text = [], []
     for s_low, s_high, _ in sev_bands:
@@ -299,9 +299,9 @@ def fmea_heatmap(fmea_rows: list[dict]) -> go.Figure:
         showscale=False
     ))
 
-    _apply_defaults(fig, "Risk Öncelik Matrisi (Şiddet × Oluşma)", height=360)
-    fig.update_xaxes(title_text="Oluşma Olasılığı")
-    fig.update_yaxes(title_text="Hata Şiddeti")
+    _apply_defaults(fig, "Risk Priority Matrix (Severity × Occurrence)", height=360)
+    fig.update_xaxes(title_text="Occurrence Probability")
+    fig.update_yaxes(title_text="Failure Severity")
     return fig
 
 

@@ -1,11 +1,5 @@
-"""
-QualityPulse — KPI Card Component
-Renders styled HTML metric cards with icon, value, delta, and color variants.
-"""
-
-import streamlit.components.v1 as components
+from nicegui import ui
 from components.icons import DASHBOARD, CHECK, ALERT, get_svg
-
 
 def kpi_card(
     label: str,
@@ -17,7 +11,7 @@ def kpi_card(
     suffix: str = "",
 ):
     """
-    Render a styled KPI card using st.markdown.
+    Render a styled KPI card using NiceGUI ui.card.
 
     Args:
         label:       Card title / KPI name
@@ -73,57 +67,28 @@ def kpi_card(
         </div>
         """
 
-    full_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }}
-  body {{ background: transparent; }}
-</style>
-</head>
-<body>
-<div style="
-    background:#ffffff;
-    border:1px solid #e8ecf0;
-    border-top:3px solid {accent};
-    border-radius:12px;
-    padding:1.1rem 1.3rem;
-    box-shadow:0 2px 8px rgba(0,0,0,0.06);
-    height:100%;
-">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-            <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;
-                        letter-spacing:0.06em;color:#6b7280;margin-bottom:0.5rem;">
-                {label}
-            </div>
-            <div style="font-size:2rem;font-weight:800;color:#1a1a2e;
-                        line-height:1;letter-spacing:-0.02em;">
-                {value}<span style="font-size:1rem;font-weight:500;
-                               color:#6b7280;margin-left:2px;">{suffix}</span>
-            </div>
-            {delta_html}
-        </div>
-        <div style="background:{bg};color:{accent};width:44px;height:44px;
-                    border-radius:10px;display:flex;align-items:center;
-                    justify-content:center;font-size:1.4rem;flex-shrink:0;">
-            {icon}
-        </div>
-    </div>
-</div>
-</body></html>"""
-    components.html(full_html, height=145)
+    with ui.card().style(f"border-top: 3px solid {accent}; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); height: 100%;").classes('w-full p-4'):
+        with ui.row().classes('w-full justify-between items-start no-wrap'):
+            with ui.column().classes('gap-0'):
+                ui.label(label).style("font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:0.5rem;")
+                with ui.row().classes('items-baseline gap-1'):
+                    ui.label(value).style("font-size:2rem;font-weight:800;color:#1a1a2e;line-height:1;letter-spacing:-0.02em;")
+                    if suffix:
+                        ui.label(suffix).style("font-size:1rem;font-weight:500;color:#6b7280;")
+                if delta_html:
+                    ui.html(delta_html)
+            
+            ui.html(f'<div style="background:{bg};color:{accent};width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">{icon}</div>')
 
 
 def cpk_card(cpk_value: float, label: str = "Cpk"):
     """Specialized Cpk card with dynamic color based on value."""
     if cpk_value >= 1.33:
-        color, status, icon_svg = "green", "Kapasiteli ✓", CHECK
+        color, status, icon_svg = "green", "CAPABLE ✓", CHECK
     elif cpk_value >= 1.00:
-        color, status, icon_svg = "amber", "Sınırda !", ALERT
+        color, status, icon_svg = "amber", "MARGINAL !", ALERT
     else:
-        color, status, icon_svg = "red", "Yetersiz ✗", ALERT
+        color, status, icon_svg = "red", "INCAPABLE ✗", ALERT
 
     color_map = {
         "green": "#2ecc71",

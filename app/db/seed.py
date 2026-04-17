@@ -22,7 +22,7 @@ DEFECT_TYPES = [
     "Çapak",
 ]
 
-SHIFTS = ["A", "B", "C"]
+SHIFTS = ["Shift 1 (08-16)", "Shift 2 (16-00)", "Shift 3 (00-08)"]
 LINES = ["Hat-1", "Hat-2"]
 
 MEASUREMENT_POINTS = [

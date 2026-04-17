@@ -4,8 +4,8 @@
 
   <p>
     <img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python Version">
-    <img src="https://img.shields.io/badge/Framework-Streamlit-FF4B4B.svg" alt="Streamlit">
-    <img src="https://img.shields.io/badge/Desktop-pywebview-yellow.svg" alt="pywebview">
+    <img src="https://img.shields.io/badge/Framework-NiceGUI-3b82f6.svg" alt="NiceGUI">
+    <img src="https://img.shields.io/badge/Desktop-Native-yellow.svg" alt="Native Desktop">
     <img src="https://img.shields.io/badge/Database-SQLite3-003B57.svg" alt="SQLite3">
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   </p>
@@ -13,7 +13,7 @@
 
 ---
 
-**QualityPulse** is a robust, desktop-first application specifically engineered to track, analyze, and elevate manufacturing quality in aluminum die casting. By marrying the analytical power of Python's data science ecosystem with a sleek, interactive user interface, QualityPulse delivers real-time, actionable insights into your production performance.
+**QualityPulse** is a robust, desktop-first application specifically engineered to track, analyze, and elevate manufacturing quality in aluminum die casting. By marrying the analytical power of Python's data science ecosystem with a sleek, interactive user interface powered by NiceGUI, QualityPulse delivers real-time, actionable insights into your production performance.
 
 ## ✨ Key Features
 
@@ -24,17 +24,16 @@
 | **📉 SPC (Statistical Process Control)** | Advanced X-bar control charts featuring automatic detection of Nelson Rules (Rules 1 & 2) violations. Includes comprehensive Cp/Cpk capability summaries and manual measurement entry. |
 | **🔧 CAPA Management** | Full lifecycle tracking for Corrective and Preventive Actions. Features overdue detection alerts and a visually intuitive, color-coded status monitoring table. |
 | **⚠️ FMEA Risk Matrix** | Risk Priority Number (RPN) driven failure mode analysis. Create and edit entries with live RPN previews and analyze risks via an interactive heatmap. |
-| **🖥️ Hybrid Deployment** | Seamlessly runs as a native Windows desktop application (via `pywebview`) or as a responsive web interface (via standard Streamlit). |
+| **🖥️ Native Desktop Deployment** | Seamlessly runs as a standalone Windows desktop application without requiring a visible web browser, utilizing NiceGUI's native mode. |
 
 ---
 
 ## 🛠️ Technology Stack
 
-QualityPulse leverages a modern, reliable stack tailored for data-heavy desktop and web applications:
+QualityPulse leverages a modern, reliable stack tailored for data-heavy desktop applications:
 
-- **Frontend UI:** [Streamlit](https://streamlit.io/) (v1.36+) for reactive, multi-page data interfaces.
-- **Desktop Wrapper:** [pywebview](https://pywebview.flowrl.com/) (v4.x) providing a native OS window experience.
-- **Data Visualization:** [Plotly](https://plotly.com/python/) & [Altair](https://altair-viz.github.io/) for highly interactive charting.
+- **Frontend UI:** [NiceGUI](https://nicegui.io/) for reactive, multi-page data interfaces using Vue.js and Quasar under the hood.
+- **Data Visualization:** [Plotly](https://plotly.com/python/) for highly interactive charting.
 - **Data Engine:** [Pandas](https://pandas.pydata.org/) & [NumPy](https://numpy.org/) for robust data manipulation.
 - **Database:** embedded [SQLite3](https://docs.python.org/3/library/sqlite3.html) for zero-config, reliable local storage.
 - **Packaging:** [PyInstaller](https://pyinstaller.org/) for creating standalone `.exe` distributables.
@@ -45,7 +44,6 @@ QualityPulse leverages a modern, reliable stack tailored for data-heavy desktop 
 
 ### 1. Prerequisites
 - **Python:** Version 3.11 or higher.
-- **WebView2 Runtime:** Required for Desktop mode on Windows. *(Note: Pre-installed on Windows 11 and updated Windows 10 systems. If the desktop window opens blank, please [install it manually](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)).*
 
 ### 2. Environment Setup
 Clone the repository and set up your virtual environment:
@@ -72,19 +70,10 @@ pip install -r app/requirements.txt
 
 The application database (`quality.db`) is **automatically initialized and seeded** with 90 days of realistic aluminum die casting sample data upon first launch.
 
-#### 🖥️ Desktop Mode (Recommended)
 Launch the application within a dedicated, native desktop window:
 ```bash
 # From the project root
 python app/main.py
-```
-
-#### 🌐 Web Browser Mode
-Launch the application as a standard web app in your default browser:
-```bash
-# From the project root
-cd app
-streamlit run streamlit_app.py
 ```
 
 ---
@@ -94,18 +83,19 @@ streamlit run streamlit_app.py
 ```text
 QualityPulse/
 ├── app/
-│   ├── main.py                # Desktop (pywebview) entry point
-│   ├── streamlit_app.py       # Streamlit root & navigation setup
+│   ├── main.py                # Desktop entry point (NiceGUI native runner)
 │   ├── pages/                 # Core application modules
 │   │   ├── 01_dashboard.py    # KPI overview & trends
 │   │   ├── 02_pareto.py       # Pareto defect analysis
 │   │   ├── 03_spc.py          # SPC control charts & Nelson rules
 │   │   ├── 04_capa.py         # CAPA lifecycle tracker
-│   │   └── 05_fmea.py         # FMEA risk matrix & heatmap
+│   │   ├── 05_fmea.py         # FMEA risk matrix & heatmap
+│   │   ├── 06_data_entry.py   # Defect & measurement input forms
+│   │   └── 07_data_export.py  # Excel download
 │   ├── db/
 │   │   ├── database.py        # SQLite schema & query helpers
 │   │   └── seed.py            # Sample data generation
-│   ├── components/            # Reusable UI elements (KPI cards, custom CSS)
+│   ├── components/            # Reusable UI elements (KPI cards, Layouts, Charts)
 │   ├── utils/                 # Calculation engines (SPC math, OEE logic)
 │   ├── assets/                # Static assets (icons)
 │   ├── quality.db             # Auto-generated SQLite database

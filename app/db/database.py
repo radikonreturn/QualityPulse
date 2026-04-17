@@ -1,13 +1,26 @@
-"""
-QualityPulse — Database Layer
-Handles SQLite connection, schema initialization, and all query helpers.
-"""
-
+import os
+import sys
 import sqlite3
 from pathlib import Path
 
-# Always resolve quality.db relative to this file's location
-DB_PATH = Path(__file__).parent.parent / "quality.db"
+def get_db_path() -> Path:
+    """
+    Get the persistent path for the database.
+    If running as a frozen executable (PyInstaller), use %APPDATA%/QualityPulse/quality.db.
+    If running in dev mode, use the app directory.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running in a bundle
+        base_dir = Path(os.environ.get("APPDATA", os.path.expanduser("~"))) / "QualityPulse"
+    else:
+        # Running in normal python environment
+        base_dir = Path(__file__).parent.parent
+
+    # Ensure directory exists
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir / "quality.db"
+
+DB_PATH = get_db_path()
 
 
 def get_connection() -> sqlite3.Connection:
@@ -28,11 +41,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS defects (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             date            TEXT    NOT NULL,
-            shift           TEXT    CHECK(shift IN ('A','B','C')),
+            shift           TEXT    NOT NULL,
+            operator        TEXT,
             defect_type     TEXT    NOT NULL,
             quantity        INTEGER NOT NULL,
             total_produced  INTEGER NOT NULL,
             line            TEXT    NOT NULL,
+            photo_path      TEXT,
             notes           TEXT
         );
 
@@ -78,6 +93,75 @@ def init_db():
     """)
     conn.commit()
     conn.close()
+    migrate_db()
+
+
+def migrate_db():
+    """Apply schema updates (alter table) if columns are missing."""
+    import re
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Check for missing columns in defects
+    cur.execute("PRAGMA table_info(defects)")
+    cols = [r["name"] for r in cur.fetchall()]
+
+    if "operator" not in cols:
+        cur.execute("ALTER TABLE defects ADD COLUMN operator TEXT")
+    if "photo_path" not in cols:
+        cur.execute("ALTER TABLE defects ADD COLUMN photo_path TEXT")
+
+    # Constraint Migration: Re-create defects table if it has the old CHECK constraint
+    cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='defects'")
+    sql = cur.fetchone()[0]
+    if "CHECK(shift IN ('A','B','C'))" in sql or "CHECK (shift IN ('A','B','C'))" in sql:
+        print("Migrating 'defects' table to remove restrictive shift constraint...")
+        cur.execute("ALTER TABLE defects RENAME TO defects_old")
+        cur.execute("""
+            CREATE TABLE defects (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                date            TEXT    NOT NULL,
+                shift           TEXT    NOT NULL,
+                operator        TEXT,
+                defect_type     TEXT    NOT NULL,
+                quantity        INTEGER NOT NULL,
+                total_produced  INTEGER NOT NULL,
+                line            TEXT    NOT NULL,
+                photo_path      TEXT,
+                notes           TEXT
+            )
+        """)
+        cur.execute("""
+            INSERT INTO defects (id, date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes)
+            SELECT id, date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes FROM defects_old
+        """)
+        cur.execute("DROP TABLE defects_old")
+        print("Migration complete.")
+
+    # Data Migration: Extract operator and photo from notes if possible
+    rows = cur.execute("SELECT id, notes FROM defects WHERE (operator IS NULL OR photo_path IS NULL) AND notes IS NOT NULL").fetchall()
+    for row in rows:
+        rid, notes = row["id"], row["notes"]
+        if not notes: continue
+
+        op_match = re.search(r"\[Operatör:\s*([^\]]+)\]", notes)
+        ph_match = re.search(r"\[PHOTO:\s*([^\]]+)\]", notes)
+
+        updates = []
+        params = []
+        if op_match:
+            updates.append("operator = ?")
+            params.append(op_match.group(1).strip())
+        if ph_match:
+            updates.append("photo_path = ?")
+            params.append(ph_match.group(1).strip())
+
+        if updates:
+            params.append(rid)
+            cur.execute(f"UPDATE defects SET {', '.join(updates)} WHERE id = ?", params)
+
+    conn.commit()
+    conn.close()
 
 
 # ─────────────────────────────────────────────
@@ -104,11 +188,14 @@ def get_defects(start_date: str = None, end_date: str = None, line: str = None) 
 
 
 def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
-                  total_produced: int, line: str, notes: str = ""):
+                  total_produced: int, line: str, operator: str = None, 
+                  photo_path: str = None, notes: str = ""):
     conn = get_connection()
     conn.execute(
-        "INSERT INTO defects (date, shift, defect_type, quantity, total_produced, line, notes) VALUES (?,?,?,?,?,?,?)",
-        (date, shift, defect_type, quantity, total_produced, line, notes)
+        """INSERT INTO defects 
+           (date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes) 
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes)
     )
     conn.commit()
     conn.close()
