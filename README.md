@@ -65,18 +65,6 @@ Launch in a dedicated desktop window:
 python app/main.py
 ```
 
-#### 🌐 Web Mode (Dev/Remote)
-Launch as a web application in your browser:
-```bash
-# Windows (PowerShell)
-$env:QP_WEB_MODE="1"; python app/main.py
-
-# Windows (CMD)
-set QP_WEB_MODE=1 && python app/main.py
-
-# Linux/macOS
-QP_WEB_MODE=1 python app/main.py
-```
 
 ---
 
@@ -99,13 +87,7 @@ QualityPulse/
 
 ---
 
-## 📦 Building Standalone Executable
-To generate a standalone `.exe` for Windows:
-```bash
-cd app
-pyinstaller build.spec
-```
-The output will be in `app/dist/QualityPulse.exe`.
+
 
 ---
 
