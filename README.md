@@ -13,30 +13,28 @@
 
 ---
 
-**QualityPulse** is a robust, desktop-first application specifically engineered to track, analyze, and elevate manufacturing quality in aluminum die casting. By marrying the analytical power of Python's data science ecosystem with a sleek, interactive user interface powered by NiceGUI, QualityPulse delivers real-time, actionable insights into your production performance.
+**QualityPulse** is a robust, desktop-first application specifically engineered to track, analyze, and elevate manufacturing quality in aluminum die casting. Built with **NiceGUI**, it delivers real-time, actionable insights through a sleek, reactive user interface.
 
 ## ✨ Key Features
 
 | Module | Description |
 | :--- | :--- |
-| **📊 Comprehensive Dashboard** | Real-time KPI tracking including Scrap Rate, Overall Equipment Effectiveness (OEE), Process Capability (Cpk), and CAPA metrics with an intuitive 30-day trend analysis and defect donut charts. |
-| **📈 Pareto Analysis** | Interactive date and production line filters powering a combo Pareto chart. Effortlessly identify, prioritize, and drill down into the most critical defect types. |
-| **📉 SPC (Statistical Process Control)** | Advanced X-bar control charts featuring automatic detection of Nelson Rules (Rules 1 & 2) violations. Includes comprehensive Cp/Cpk capability summaries and manual measurement entry. |
-| **🔧 CAPA Management** | Full lifecycle tracking for Corrective and Preventive Actions. Features overdue detection alerts and a visually intuitive, color-coded status monitoring table. |
-| **⚠️ FMEA Risk Matrix** | Risk Priority Number (RPN) driven failure mode analysis. Create and edit entries with live RPN previews and analyze risks via an interactive heatmap. |
-| **🖥️ Native Desktop Deployment** | Seamlessly runs as a standalone Windows desktop application without requiring a visible web browser, utilizing NiceGUI's native mode. |
+| **📊 Comprehensive Dashboard** | Real-time KPI tracking including Scrap Rate, OEE, Cpk, and CAPA metrics with 30-day trend analysis. |
+| **📈 Pareto Analysis** | Interactive defect analysis with multi-line filters for prioritizing critical quality issues. |
+| **📉 SPC (Statistical Process Control)** | Advanced X-bar control charts with automatic Nelson Rules detection and capability analysis (Cp/Cpk). |
+| **🔧 CAPA Management** | Full lifecycle tracking for Corrective and Preventive Actions with status monitoring and alerts. |
+| **⚠️ FMEA Risk Matrix** | Risk Priority Number (RPN) driven failure mode analysis with interactive heatmaps. |
+| **🖥️ Native Desktop Experience** | Standalone Windows application functionality utilizing NiceGUI's native mode. |
 
 ---
 
 ## 🛠️ Technology Stack
 
-QualityPulse leverages a modern, reliable stack tailored for data-heavy desktop applications:
-
-- **Frontend UI:** [NiceGUI](https://nicegui.io/) for reactive, multi-page data interfaces using Vue.js and Quasar under the hood.
-- **Data Visualization:** [Plotly](https://plotly.com/python/) for highly interactive charting.
-- **Data Engine:** [Pandas](https://pandas.pydata.org/) & [NumPy](https://numpy.org/) for robust data manipulation.
-- **Database:** embedded [SQLite3](https://docs.python.org/3/library/sqlite3.html) for zero-config, reliable local storage.
-- **Packaging:** [PyInstaller](https://pyinstaller.org/) for creating standalone `.exe` distributables.
+- **Frontend UI:** [NiceGUI](https://nicegui.io/) (Native Desktop Mode)
+- **Data Visualization:** [Plotly](https://plotly.com/python/)
+- **Data Engine:** [Pandas](https://pandas.pydata.org/) & [NumPy](https://numpy.org/)
+- **Database:** [SQLite3](https://docs.python.org/3/library/sqlite3.html) (Auto-seeding included)
+- **Packaging:** [PyInstaller](https://pyinstaller.org/)
 
 ---
 
@@ -45,35 +43,39 @@ QualityPulse leverages a modern, reliable stack tailored for data-heavy desktop 
 ### 1. Prerequisites
 - **Python:** Version 3.11 or higher.
 
-### 2. Environment Setup
-Clone the repository and set up your virtual environment:
+### 2. Installation
+Clone the repository and install the required dependencies:
 
 ```bash
-# Clone the repo (if you haven't already)
+# Clone the repo
 git clone https://github.com/radikonreturn/QualityPulse.git
 cd QualityPulse
 
-# Create a virtual environment
-python -m venv .venv
-
-# Activate the environment
-# On Windows:
-.\.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# Install required dependencies
+# Install dependencies
 pip install -r app/requirements.txt
 ```
 
 ### 3. Running the Application
 
-The application database (`quality.db`) is **automatically initialized and seeded** with 90 days of realistic aluminum die casting sample data upon first launch.
+The database (`quality.db`) is **automatically initialized and seeded** with 90 days of sample data on the first run.
 
-Launch the application within a dedicated, native desktop window:
+#### 🪟 Native Desktop Mode (Recommended)
+Launch in a dedicated desktop window:
 ```bash
-# From the project root
 python app/main.py
+```
+
+#### 🌐 Web Mode (Dev/Remote)
+Launch as a web application in your browser:
+```bash
+# Windows (PowerShell)
+$env:QP_WEB_MODE="1"; python app/main.py
+
+# Windows (CMD)
+set QP_WEB_MODE=1 && python app/main.py
+
+# Linux/macOS
+QP_WEB_MODE=1 python app/main.py
 ```
 
 ---
@@ -83,51 +85,32 @@ python app/main.py
 ```text
 QualityPulse/
 ├── app/
-│   ├── main.py                # Desktop entry point (NiceGUI native runner)
-│   ├── pages/                 # Core application modules
-│   │   ├── 01_dashboard.py    # KPI overview & trends
-│   │   ├── 02_pareto.py       # Pareto defect analysis
-│   │   ├── 03_spc.py          # SPC control charts & Nelson rules
-│   │   ├── 04_capa.py         # CAPA lifecycle tracker
-│   │   ├── 05_fmea.py         # FMEA risk matrix & heatmap
-│   │   ├── 06_data_entry.py   # Defect & measurement input forms
-│   │   └── 07_data_export.py  # Excel download
-│   ├── db/
-│   │   ├── database.py        # SQLite schema & query helpers
-│   │   └── seed.py            # Sample data generation
-│   ├── components/            # Reusable UI elements (KPI cards, Layouts, Charts)
-│   ├── utils/                 # Calculation engines (SPC math, OEE logic)
-│   ├── assets/                # Static assets (icons)
-│   ├── quality.db             # Auto-generated SQLite database
+│   ├── main.py                # Desktop entry point
+│   ├── pages/                 # Core application modules (Dashboard, SPC, FMEA, etc.)
+│   ├── db/                    # Database schema & seeding logic
+│   ├── components/            # Reusable UI elements
+│   ├── utils/                 # Analytics & SPC engines
+│   ├── assets/                # Static assets & icons
 │   ├── requirements.txt       # Python dependencies
 │   └── build.spec             # PyInstaller configuration
-├── GEMINI.md                  # AI Agent context & technical specifications
+├── GEMINI.md                  # Development context & rules
 └── README.md                  # Project documentation (this file)
 ```
 
 ---
 
-## 📦 Building a Standalone Executable
-
-To package QualityPulse as a standalone Windows executable (`.exe`) that doesn't require users to install Python:
-
+## 📦 Building Standalone Executable
+To generate a standalone `.exe` for Windows:
 ```bash
-# Ensure you are in the app directory
 cd app
-
-# Install PyInstaller if not already installed
-pip install pyinstaller
-
-# Build the executable using the provided spec file
 pyinstaller build.spec
 ```
-The compiled application will be generated in `app/dist/QualityPulse.exe`.
+The output will be in `app/dist/QualityPulse.exe`.
 
 ---
 
 ## 📄 License
-
-This project is distributed under the **MIT License**. See the `LICENSE` file for more information.
+Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
 

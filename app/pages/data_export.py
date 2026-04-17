@@ -3,10 +3,11 @@ import pandas as pd
 import sqlite3
 import os
 from datetime import datetime
-from db.database import DB_PATH
+from db.database import DB_PATH, get_audit_logs
 from components.layout import frame
 from utils.export import format_excel_sheet
 from utils.calculations import calculate_scrap_rate, count_overdue_capa
+from nicegui import app
 
 def get_db_connection():
     return sqlite3.connect(str(DB_PATH))
@@ -59,6 +60,27 @@ def create_excel_export() -> str:
             df_summary = pd.DataFrame(summary_rows)
             df_summary.to_excel(writer, sheet_name="Executive Summary", index=False)
             format_excel_sheet(writer.sheets["Executive Summary"])
+
+            # Corporate Branding / Cover Page
+            cfg = app.storage.user.get('config', {})
+            cover_rows = [
+                {"Field": "Enterprise Name", "Data": cfg.get("company", {}).get("name", "N/A")},
+                {"Field": "Facility / Plant", "Data": cfg.get("company", {}).get("facility", "N/A")},
+                {"Field": "Quality Lead", "Data": cfg.get("company", {}).get("qe", "N/A")},
+                {"Field": "Plant City", "Data": cfg.get("company", {}).get("city", "N/A")},
+                {"Field": "Total Headcount", "Data": cfg.get("company", {}).get("employees", 0)},
+                {"Field": "Status", "Data": "CERTIFIED AUDIT REPORT"}
+            ]
+            df_cover = pd.DataFrame(cover_rows)
+            df_cover.to_excel(writer, sheet_name="Company Overview", index=False)
+            format_excel_sheet(writer.sheets["Company Overview"])
+
+            # System Audit Logs Sheet
+            audit_data = get_audit_logs(limit=500)
+            if audit_data:
+                df_audit = pd.DataFrame(audit_data)
+                df_audit.to_excel(writer, sheet_name="Audit Journal", index=False)
+                format_excel_sheet(writer.sheets["Audit Journal"])
 
         return target_path
     finally:

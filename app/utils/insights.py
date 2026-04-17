@@ -52,3 +52,28 @@ def generate_quality_insights(defects: list[dict]) -> list[str]:
         insights.append("Continuous improvement detected: Daily scrap volume is trending downwards.")
 
     return insights
+
+def get_defect_heatmap_data(defects: list[dict]):
+    """
+    Pivots defect data to create a matrix of [Line] vs [Defect Type].
+    Returns (x_axis, y_axis, z_matrix)
+    """
+    if not defects:
+        return [], [], []
+    
+    lines = sorted(list(set(d['line'] for d in defects)))
+    d_types = sorted(list(set(d['defect_type'] for d in defects)))
+    
+    # Initialize matrix with zeros
+    matrix = [[0 for _ in range(len(lines))] for _ in range(len(d_types))]
+    
+    # Fill matrix
+    line_map = {name: i for i, name in enumerate(lines)}
+    type_map = {name: i for i, name in enumerate(d_types)}
+    
+    for d in defects:
+        lx = line_map[d['line']]
+        ty = type_map[d['defect_type']]
+        matrix[ty][lx] += d['quantity']
+        
+    return lines, d_types, matrix

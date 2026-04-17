@@ -1,1 +1,18 @@
+# Python
+__pycache__/
+*.pyc
 .venv/
+.env
+
+# Project specific
+quality.db
+uploads/
+find_emojis.py
+replace_emojis.py
+
+# Build artifacts
+app/build/
+app/dist/
+*.spec
+*.pkg
+run_output.log

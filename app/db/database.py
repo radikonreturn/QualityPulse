@@ -3,24 +3,10 @@ import sys
 import sqlite3
 from pathlib import Path
 
-def get_db_path() -> Path:
-    """
-    Get the persistent path for the database.
-    If running as a frozen executable (PyInstaller), use %APPDATA%/QualityPulse/quality.db.
-    If running in dev mode, use the app directory.
-    """
-    if getattr(sys, 'frozen', False):
-        # Running in a bundle
-        base_dir = Path(os.environ.get("APPDATA", os.path.expanduser("~"))) / "QualityPulse"
-    else:
-        # Running in normal python environment
-        base_dir = Path(__file__).parent.parent
+from pathlib import Path
+from utils.paths import get_app_storage_dir
 
-    # Ensure directory exists
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / "quality.db"
-
-DB_PATH = get_db_path()
+DB_PATH = get_app_storage_dir() / "quality.db"
 
 
 def get_connection() -> sqlite3.Connection:
@@ -89,6 +75,16 @@ def init_db():
             recommended_action  TEXT,
             responsible         TEXT,
             status              TEXT    CHECK(status IN ('Open','In Progress','Closed')) DEFAULT 'Open'
+        );
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp       TEXT    NOT NULL,
+            user            TEXT    NOT NULL,
+            action          TEXT    NOT NULL,
+            table_affected  TEXT    NOT NULL,
+            record_id       INTEGER,
+            details         TEXT
         );
     """)
     conn.commit()
@@ -191,14 +187,39 @@ def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
                   total_produced: int, line: str, operator: str = None, 
                   photo_path: str = None, notes: str = ""):
     conn = get_connection()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO defects 
            (date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes) 
            VALUES (?,?,?,?,?,?,?,?,?)""",
         (date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes)
     )
+    last_id = cur.lastrowid
+    log_action(operator or "System", "CREATE", "defects", last_id, f"Entry: {defect_type} ({quantity}) on {line}")
     conn.commit()
     conn.close()
+
+
+# ─────────────────────────────────────────────
+# AUDIT LOGS
+# ─────────────────────────────────────────────
+
+def log_action(user: str, action: str, table_affected: str, record_id: int = None, details: str = ""):
+    """Record an action in the system audit log."""
+    from datetime import datetime
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO audit_logs (timestamp, user, action, table_affected, record_id, details) VALUES (?,?,?,?,?,?)",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user, action, table_affected, record_id, details)
+    )
+    conn.commit()
+    conn.close()
+
+def get_audit_logs(limit: int = 200) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ─────────────────────────────────────────────
@@ -229,10 +250,13 @@ def get_measurement_points() -> list[str]:
 def insert_measurement(timestamp: str, line: str, measurement_point: str,
                         value: float, nominal: float, tolerance_upper: float, tolerance_lower: float):
     conn = get_connection()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         "INSERT INTO measurements (timestamp, line, measurement_point, value, nominal, tolerance_upper, tolerance_lower) VALUES (?,?,?,?,?,?,?)",
         (timestamp, line, measurement_point, value, nominal, tolerance_upper, tolerance_lower)
     )
+    last_id = cur.lastrowid
+    log_action("System", "CREATE", "measurements", last_id, f"Inspection: {measurement_point} -> {value}")
     conn.commit()
     conn.close()
 
@@ -265,7 +289,8 @@ def get_all_capa(status_filter: list = None, criticality_filter: list = None, ow
 def insert_capa(created_date, title, description, root_cause, corrective_action,
                 owner, due_date, criticality, status="Open", closed_date=None):
     conn = get_connection()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO capa
            (created_date, title, description, root_cause, corrective_action,
             owner, due_date, criticality, status, closed_date)
@@ -273,6 +298,8 @@ def insert_capa(created_date, title, description, root_cause, corrective_action,
         (created_date, title, description, root_cause, corrective_action,
          owner, due_date, criticality, status, closed_date)
     )
+    last_id = cur.lastrowid
+    log_action(owner, "CREATE", "capa", last_id, f"Action: {title}")
     conn.commit()
     conn.close()
 

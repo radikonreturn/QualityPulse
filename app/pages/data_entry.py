@@ -2,8 +2,9 @@ from nicegui import ui, app
 import collections
 from datetime import datetime
 from db.database import (
-    insert_defect, insert_measurement
+    insert_defect, insert_measurement, get_audit_logs
 )
+from utils.backup import create_backup, restore_backup
 from components.layout import frame
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -32,11 +33,12 @@ def _shift_now(shift_cfg) -> str:
 def data_entry_page():
     if 'config' not in app.storage.user:
         app.storage.user['config'] = {
-            "company": {"name": "QualityPulse Demo", "sector": "Metal Casting", "facility": "Plant-1", "city": "Istanbul", "employees": 150, "qe": "Admin"},
-            "lines": [{"name": "Line-1", "shifts": 3, "target": 100}, {"name": "Line-2", "shifts": 3, "target": 100}],
+            "company": {"name": "Your Enterprise Name", "sector": "Manufacturing", "facility": "Plant-A", "city": "Location", "employees": 0, "qe": "Admin"},
+            "lines": [{"name": "Main Line", "shifts": 3, "target": 100}],
             "quality": {"defects": DEFECT_TYPES_DEFAULT.copy(), "scrap_target": 2.0},
             "spc_points": [{"point": r[0], "nom": r[1], "usl": r[2], "lsl": r[3]} for r in MEASUREMENT_POINTS_DEFAULT],
             "shifts": DEFAULT_SHIFTS,
+            "notifications": {"enabled": False, "smtp_server": "smtp.gmail.com", "smtp_port": 587, "smtp_user": "", "smtp_pass": "", "target_email": ""},
         }
     
     cfg = app.storage.user['config']
@@ -113,6 +115,16 @@ def content(cfg):
                                 line=line_v.value, operator=op_v.value.strip(),
                                 photo_path=upload_data['path']
                             )
+                            
+                            # Trigger Alert Logic
+                            scrap_rate = (qty_v.value / total_v.value * 100) if total_v.value > 0 else 0
+                            if scrap_rate > cfg.get("quality", {}).get("scrap_target", 2.0):
+                                from utils.notifier import send_email_alert
+                                send_email_alert(
+                                    subject=f"CRITICAL SCRAP RATE: {line_v.value}",
+                                    message=f"A scrap rate of {scrap_rate:.2f}% was recorded on {line_v.value}.\nDefect: {type_v.value}\nQty: {qty_v.value}\nOperator: {op_v.value}"
+                                )
+
                             ui.notify(f'Successfully logged {qty_v.value} defects for {line_v.value}', type='positive')
                             qty_v.value = 0
                             upload_data['path'] = None # Reset for next entry
@@ -217,27 +229,188 @@ def content(cfg):
 
         # ── Settings Panel ──────────────────────────────────────────────────
         with ui.tab_panel(settings_tab):
-            with ui.row().classes('w-full gap-8 items-start mt-4'):
-                with ui.card().classes('flex-1 p-8 shadow-sm border border-slate-200 rounded-2xl'):
-                    ui.label('Enterprise Configuration').classes('text-lg font-black mb-6 uppercase tracking-tighter')
-                    c_name = ui.input('Company Name', value=cfg["company"]["name"]).classes('w-full mb-2').props('outlined dense')
-                    c_fac = ui.input('Facility / Plant', value=cfg["company"]["facility"]).classes('w-full mb-2').props('outlined dense')
-                    c_qe = ui.input('Quality Lead', value=cfg["company"]["qe"]).classes('w-full mb-6').props('outlined dense')
-                    
-                    def save_local_settings():
-                        cfg["company"]["name"] = c_name.value
-                        cfg["company"]["facility"] = c_fac.value
-                        cfg["company"]["qe"] = c_qe.value
-                        app.storage.user['config'] = cfg
-                        ui.notify('Configuration Updated', type='positive')
+            @ui.refreshable
+            def settings_ui():
+                cfg = app.storage.user.get('config', {})
+                with ui.row().classes('w-full gap-8 items-start mt-4'):
+                    # --- Column 1: Company Profile ---
+                    with ui.column().classes('flex-1 gap-6'):
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
+                            with ui.row().classes('items-center gap-2 mb-6'):
+                                ui.icon('business', size='24px').classes('text-blue-600')
+                                ui.label('Enterprise Profile').classes('text-lg font-black uppercase tracking-tighter')
+                            c_name = ui.input('Company Name', value=cfg["company"]["name"]).classes('w-full mb-2').props('outlined dense')
+                            c_sector = ui.input('Sector', value=cfg["company"]["sector"]).classes('w-full mb-2').props('outlined dense')
+                            c_fac = ui.input('Facility / Plant', value=cfg["company"]["facility"]).classes('w-full mb-2').props('outlined dense')
+                            c_city = ui.input('City', value=cfg["company"]["city"]).classes('w-full mb-2').props('outlined dense')
+                            c_emp = ui.number('Total Employees', value=cfg["company"]["employees"]).classes('w-full mb-2').props('outlined dense')
+                            c_qe = ui.input('Quality Lead', value=cfg["company"]["qe"]).classes('w-full mb-6').props('outlined dense')
+                        
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl bg-slate-50'):
+                            with ui.row().classes('items-center gap-2 mb-4'):
+                                ui.icon('report_problem', size='20px').classes('text-amber-600')
+                                ui.label('Defect Management').classes('text-sm font-bold uppercase')
+                            def_list = ui.textarea('Defect Types (One per line)', value="\n".join(cfg["quality"]["defects"])) \
+                                .classes('w-full h-32').props('outlined')
+                            ui.label('Changing these will affect future logs only.').classes('text-[10px] text-slate-400 italic mt-1')
 
-                    ui.button('Apply Changes', on_click=save_local_settings, icon='save').props('outlined').classes('w-full text-blue-600 font-bold h-12 rounded-xl')
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
+                            with ui.row().classes('items-center gap-2 mb-6'):
+                                ui.icon('notifications_active', size='24px').classes('text-amber-600')
+                                ui.label('Alert Configuration').classes('text-lg font-black uppercase tracking-tighter')
+                            
+                            n_cfg = cfg.get("notifications", {})
+                            n_enabled = ui.switch('Enable Email Alerts', value=n_cfg.get('enabled', False)).classes('mb-4')
+                            with ui.column().bind_visibility_from(n_enabled, 'value').classes('w-full gap-2'):
+                                n_server = ui.input('SMTP Server', value=n_cfg.get('smtp_server')).props('outlined dense').classes('w-full')
+                                with ui.row().classes('w-full gap-2'):
+                                    n_user = ui.input('SMTP User', value=n_cfg.get('smtp_user')).props('outlined dense').classes('flex-2')
+                                    n_pass = ui.input('Password', value=n_cfg.get('smtp_pass'), password=True).props('outlined dense').classes('flex-1')
+                                n_target = ui.input('Target Alert Email', value=n_cfg.get('target_email')).props('outlined dense').classes('w-full')
+                            
+                            ui.label('Alerts are triggered when scrap rates exceed target thresholds.').classes('text-[10px] text-slate-400 italic')
 
-                with ui.card().classes('flex-1 p-8 shadow-sm bg-slate-50 border border-slate-200 rounded-2xl'):
-                    ui.label('System Health').classes('text-lg font-black mb-6 uppercase tracking-tighter')
-                    ui.label(f"Active Lines: {len(cfg['lines'])}").classes('text-sm font-bold text-slate-700')
-                    ui.label(f"Defined Defect Types: {len(defect_types)}").classes('text-sm text-slate-500 mt-1')
-                    ui.label(f"SPC Points: {len(cfg['spc_points'])}").classes('text-sm text-slate-500 mt-1')
+                    with ui.column().classes('flex-[2] gap-6'):
+                        # Data Portability & Backup
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl bg-slate-900 text-white'):
+                            with ui.row().classes('items-center gap-2 mb-4'):
+                                ui.icon('cloud_upload', size='24px').classes('text-blue-400')
+                                ui.label('Data Portability').classes('text-lg font-black uppercase tracking-tighter')
+                            
+                            ui.label('Export your entire database and photo gallery into a portable backup file, or restore a previous session.').classes('text-xs text-slate-400 mb-6')
+                            
+                            with ui.row().classes('w-full gap-4'):
+                                def do_export():
+                                    import tempfile
+                                    with tempfile.NamedTemporaryFile(suffix='.qpbackup', delete=False) as tmp:
+                                        create_backup(tmp.name)
+                                        ui.download(tmp.name, filename=f"QualityPulse_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.qpbackup")
+                                    ui.notify('Backup exported successfully.', type='positive')
+
+                                ui.button('DOWNLOAD FULL BACKUP', on_click=do_export, icon='download') \
+                                    .props('no-caps outline').classes('flex-1 text-white border-white/20')
+                                
+                                async def handle_import(e):
+                                    import tempfile
+                                    with tempfile.NamedTemporaryFile(suffix='.qpbackup', delete=False) as tmp:
+                                        tmp.write(e.content.read())
+                                        restore_backup(tmp.name)
+                                    ui.notify('System Restored! Restarting app...', type='warning', position='top')
+                                    ui.timer(2.0, ui.navigate.to, once=True) # Full refresh
+
+                                ui.upload(on_upload=handle_import, label='Import .qpbackup', auto_upload=True) \
+                                    .props('flat bordered color=white').classes('flex-1 h-12 text-xs')
+
+                        # Shift Table
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
+                            with ui.row().classes('items-center gap-2 mb-6'):
+                                ui.icon('schedule', size='24px').classes('text-blue-600')
+                                ui.label('Shift Schedule').classes('text-lg font-black uppercase tracking-tighter')
+                            
+                            shift_rows = []
+                            for i, s in enumerate(cfg["shifts"]):
+                                with ui.row().classes('w-full items-center gap-4 py-2 border-b border-slate-100'):
+                                    ui.label(f"#{i+1}").classes('text-xs font-bold text-slate-300 w-6')
+                                    s_name = ui.input(value=s["name"]).props('outlined dense').classes('flex-[2]')
+                                    s_start = ui.number(value=s["start"], min=0, max=23).props('outlined dense suffix="h"').classes('flex-1')
+                                    s_end = ui.number(value=s["end"], min=0, max=23).props('outlined dense suffix="h"').classes('flex-1')
+                                    shift_rows.append((s_name, s_start, s_end))
+
+                        # Line Table
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
+                            with ui.row().classes('items-center justify-between mb-6'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('settings_input_component', size='24px').classes('text-emerald-600')
+                                    ui.label('Production Lines').classes('text-lg font-black uppercase tracking-tighter')
+                                ui.button(icon='add', on_click=lambda: add_line()).props('flat round color=positive')
+                            
+                            line_rows = []
+                            def add_line():
+                                cfg["lines"].append({"name": f"Line-{len(cfg['lines'])+1}", "shifts": 3, "target": 100})
+                                app.storage.user['config'] = cfg
+                                settings_ui.refresh()
+
+                            def remove_line(idx):
+                                if len(cfg["lines"]) > 1:
+                                    cfg["lines"].pop(idx)
+                                    app.storage.user['config'] = cfg
+                                    settings_ui.refresh()
+
+                            for i, l in enumerate(cfg["lines"]):
+                                with ui.row().classes('w-full items-center gap-4 py-2 border-b border-slate-100'):
+                                    l_name = ui.input(value=l["name"]).props('outlined dense').classes('flex-[2]')
+                                    l_target = ui.number(value=l["target"], min=1).props('outlined dense suffix="pcs/sh"').classes('flex-1')
+                                    ui.button(icon='delete', on_click=lambda i=i: remove_line(i)).props('flat dense color=negative').classes('w-8')
+                                    line_rows.append((l_name, l_target))
+
+                        # Audit Journal (Full Width at Bottom)
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl bg-white'):
+                            with ui.row().classes('items-center gap-2 mb-6'):
+                                ui.icon('assignment', size='24px').classes('text-slate-400')
+                                ui.label('System Audit Journal').classes('text-lg font-black uppercase tracking-tighter')
+                            
+                            logs = get_audit_logs(limit=50)
+                            if logs:
+                                ui.table(columns=[
+                                    {'name': 't', 'label': 'Time', 'field': 'timestamp', 'align': 'left'},
+                                    {'name': 'u', 'label': 'User', 'field': 'user', 'align': 'left'},
+                                    {'name': 'a', 'label': 'Action', 'field': 'action', 'align': 'center'},
+                                    {'name': 'tbl', 'label': 'Table', 'field': 'table_affected', 'align': 'center'},
+                                    {'name': 'det', 'label': 'Details', 'field': 'details', 'align': 'left'},
+                                ], rows=logs).classes('w-full').props('flat dense')
+                            else:
+                                ui.label('No system events recorded yet.').classes('text-slate-400 italic text-sm')
+
+                def save_advanced_settings():
+                    # 1. Update Company
+                    cfg["company"].update({
+                        "name": c_name.value,
+                        "sector": c_sector.value,
+                        "facility": c_fac.value,
+                        "city": c_city.value,
+                        "employees": int(c_emp.value or 0),
+                        "qe": c_qe.value
+                    })
                     
-                    ui.separator().classes('my-6')
-                    ui.label('Last Database Sync: Just Now').classes('text-[10px] text-slate-400 font-black tracking-widest uppercase')
+                    # 2. Update Defects
+                    cfg["quality"]["defects"] = [d.strip() for d in def_list.value.split('\n') if d.strip()]
+                    
+                    # 3. Update Shifts
+                    new_shifts = []
+                    for name_ui, start_ui, end_ui in shift_rows:
+                        new_shifts.append({
+                            "name": name_ui.value,
+                            "start": int(start_ui.value),
+                            "end": int(end_ui.value),
+                            "active": True
+                        })
+                    cfg["shifts"] = new_shifts
+                    
+                    # 4. Update Lines
+                    new_lines = []
+                    for name_ui, target_ui in line_rows:
+                        new_lines.append({
+                            "name": name_ui.value,
+                            "shifts": 3,
+                            "target": int(target_ui.value)
+                        })
+                    cfg["lines"] = new_lines
+                    
+                    # 5. Update Notifications
+                    cfg["notifications"] = {
+                        "enabled": n_enabled.value,
+                        "smtp_server": n_server.value,
+                        "smtp_user": n_user.value,
+                        "smtp_pass": n_pass.value,
+                        "target_email": n_target.value
+                    }
+                    
+                    app.storage.user['config'] = cfg
+                    ui.notify('Corporate Data Successfully Saved', type='positive', icon='check_circle')
+                    ui.timer(1.0, ui.navigate.to, once=True) # Refresh page logic
+
+                with ui.row().classes('w-full justify-end mt-4 mb-12'):
+                    ui.button('PERSIST ENTERPRISE DATA', on_click=save_advanced_settings, icon='save') \
+                        .props('elevated no-caps').classes('bg-slate-900 text-white px-8 h-14 font-black rounded-xl')
+
+            settings_ui()

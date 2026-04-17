@@ -81,7 +81,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="QualityPulse",
+    name="qualitypulse1",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

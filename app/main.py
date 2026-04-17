@@ -2,6 +2,7 @@ import os
 import sys
 import importlib
 from nicegui import ui
+from fastapi.responses import RedirectResponse
 
 # Ensure app directory is on path
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -10,30 +11,18 @@ if APP_DIR not in sys.path:
 
 from db.database import init_db
 from db.seed import run as seed_run
+from utils.paths import get_app_storage_dir
 
 # Initialize Database
-db_path = os.path.join(APP_DIR, "quality.db")
 init_db()
-
-# Improved Seeding logic: Check if database is actually empty
-def needs_seeding():
-    from db.database import get_defects
-    try:
-        defects = get_defects(limit=1)
-        return len(defects) == 0
-    except Exception:
-        return True
-
-if needs_seeding():
-    print("Database empty or missing. Running seed logic...")
-    seed_run()
 
 # Layout components
 from components.layout import frame
 from nicegui import app
 
 # Add static files for assets and user uploads
-UPLOAD_DIR = os.path.join(APP_DIR, 'uploads')
+STORAGE_DIR = get_app_storage_dir()
+UPLOAD_DIR = os.path.join(STORAGE_DIR, 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app.add_static_files('/assets', os.path.join(APP_DIR, 'assets'))
@@ -48,6 +37,7 @@ page_modules = [
     "pages.fmea",
     "pages.data_entry",
     "pages.data_export",
+    "pages.login",
 ]
 
 for mod in page_modules:
@@ -65,6 +55,16 @@ def handle_exception(e: Exception):
 app.on_exception(handle_exception)
 
 if __name__ in {"__main__", "__mp_main__"}:
+    # Global Security Middleware
+    unrestricted_pages = ['/login', '/static', '/_nicegui']
+    
+    @app.middleware
+    async def auth_middleware(request, call_next):
+        if not app.storage.user.get('authenticated', False):
+            if not any(request.url.path.startswith(p) for p in unrestricted_pages):
+                return RedirectResponse('/login')
+        return await call_next(request)
+
     # Run the application
     native_mode = os.getenv('QP_WEB_MODE', '0') != '1'
     

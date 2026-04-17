@@ -11,7 +11,8 @@ from components.kpi_card import kpi_card, cpk_card
 from components.charts import scrap_trend_chart, defect_donut_chart, oee_gauge
 from components.icons import SCRAP, OEE, ALERT, get_svg
 from components.layout import frame
-from utils.insights import generate_quality_insights
+from components.tour_component import guided_tour
+from utils.insights import generate_quality_insights, get_defect_heatmap_data
 
 @ui.page('/')
 def dashboard_page():
@@ -105,6 +106,29 @@ def content():
             fig_donut = defect_donut_chart(this_month_defects)
             ui.plotly(fig_donut).classes('w-full h-[320px]')
 
+    ui.label('Quality Interconnectivity Matrix').classes('text-lg font-bold text-slate-700 mb-4 ml-1')
+    
+    with ui.row().classes('w-full gap-6 mb-8 items-stretch'):
+        with ui.card().classes('w-full p-6 shadow-sm border border-slate-200 rounded-xl overflow-hidden'):
+            import plotly.graph_objects as go
+            h_lines, h_types, h_matrix = get_defect_heatmap_data(last_30_defects)
+            if h_matrix:
+                fig_hm = go.Figure(data=go.Heatmap(
+                    z=h_matrix, x=h_lines, y=h_types,
+                    colorscale='Viridis', showscale=True,
+                    hoverongaps = False)
+                )
+                fig_hm.update_layout(
+                    title='Line vs Defect Correlation (30 Days)',
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=300
+                )
+                ui.plotly(fig_hm).classes('w-full')
+            else:
+                ui.label('Insufficient data for correlation matrix.').classes('text-slate-400 italic text-center w-full py-20')
+
     ui.label('Operational Insights').classes('text-lg font-bold text-slate-700 mb-4 ml-1')
     
     # OEE & Summary Row
@@ -136,3 +160,6 @@ def content():
                     with ui.column().classes('p-3 gap-0'):
                         ui.label(f"{d['defect_type']}").classes('text-[10px] font-black uppercase text-slate-800')
                         ui.label(f"{d['date']} | {d['line']}").classes('text-[9px] text-slate-400')
+
+    # Trigger Guided Tour
+    guided_tour()

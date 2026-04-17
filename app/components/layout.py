@@ -50,8 +50,14 @@ def frame(page_title: str):
                 ui.label(page_title).classes('text-xl font-extrabold tracking-tight text-slate-800 uppercase')
             
             with ui.row().classes('items-center gap-4'):
-                ui.icon('notifications', size='20px').classes('text-slate-400 cursor-pointer hover:text-primary transition-colors')
-                ui.icon('account_circle', size='28px').classes('text-slate-500 cursor-pointer')
+                ui.icon('notifications', size='20px').classes('text-slate-400 cursor-pointer')
+                
+                def logout():
+                    from nicegui import app
+                    app.storage.user['authenticated'] = False
+                    ui.navigate.to('/login')
+                
+                ui.button(on_click=logout, icon='logout').props('flat round dense color=negative').classes('hover:bg-red-50 transition-all')
     
     # Content wrapper
     return ui.column().classes('p-8 w-full max-w-[1600px] mx-auto animate-fade-in')
