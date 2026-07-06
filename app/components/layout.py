@@ -3,7 +3,7 @@ from nicegui import ui
 def menu():
     with ui.column().classes('w-full items-center mb-8 q-pa-md'):
         with ui.row().classes('items-center gap-3 mb-6'):
-            ui.image('/assets/icon.png').classes('w-12 h-12 rounded-xl shadow-md')
+            ui.image('/assets/icon.svg').classes('w-12 h-12 rounded-xl shadow-md')
             with ui.column().classes('gap-0'):
                 ui.label('QualityPulse').classes('text-lg text-white font-bold tracking-tight')
                 ui.label('SYSTEM v1.0').classes('text-[10px] text-blue-400 font-black tracking-widest')
