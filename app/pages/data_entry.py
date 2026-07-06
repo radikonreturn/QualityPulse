@@ -5,21 +5,12 @@ from db.database import (
     insert_defect, insert_measurement, get_audit_logs
 )
 from utils.backup import create_backup, restore_backup
+from utils.config import load_config, normalize_config, save_config
 from components.layout import frame
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-DEFECT_TYPES_DEFAULT = ["Dimensional Deviation", "Surface Defect", "Porosity", "Shrinkage", "Flash"]
-MEASUREMENT_POINTS_DEFAULT = [
-    ("Diameter-A", 50.00, 50.10, 49.90),
-    ("Diameter-B", 25.00, 25.05, 24.95),
-]
-DEFAULT_SHIFTS = [
-    {"name": "Shift 1 (08-16)", "label": "Morning", "start": 8,  "end": 16, "active": True},
-    {"name": "Shift 2 (16-00)", "label": "Evening", "start": 16, "end": 0,  "active": True},
-    {"name": "Shift 3 (00-08)", "label": "Night",   "start": 0,  "end": 8,  "active": True},
-]
-
 def _shift_now(shift_cfg) -> str:
+    if not shift_cfg:
+        return "Shift 1"
     h = datetime.now().hour
     for s in shift_cfg:
         start, end = int(s["start"]), int(s["end"])
@@ -29,19 +20,17 @@ def _shift_now(shift_cfg) -> str:
             if h >= start or h < end: return s["name"]
     return shift_cfg[0]["name"]
 
+def _line_target(cfg, line_name: str) -> int:
+    default_qty = int(cfg.get("quality", {}).get("default_total_produced", 300) or 300)
+    for line in cfg.get("lines", []):
+        if line.get("name") == line_name:
+            return int(line.get("target") or default_qty)
+    return default_qty
+
 @ui.page('/data_entry')
 def data_entry_page():
-    if 'config' not in app.storage.user:
-        app.storage.user['config'] = {
-            "company": {"name": "Your Enterprise Name", "sector": "Manufacturing", "facility": "Plant-A", "city": "Location", "employees": 0, "qe": "Admin"},
-            "lines": [{"name": "Main Line", "shifts": 3, "target": 100}],
-            "quality": {"defects": DEFECT_TYPES_DEFAULT.copy(), "scrap_target": 2.0},
-            "spc_points": [{"point": r[0], "nom": r[1], "usl": r[2], "lsl": r[3]} for r in MEASUREMENT_POINTS_DEFAULT],
-            "shifts": DEFAULT_SHIFTS,
-            "notifications": {"enabled": False, "smtp_server": "smtp.gmail.com", "smtp_port": 587, "smtp_user": "", "smtp_pass": "", "target_email": ""},
-        }
-    
-    cfg = app.storage.user['config']
+    cfg = normalize_config(app.storage.user.get('config') or load_config())
+    app.storage.user['config'] = cfg
     
     with frame('Data Entry Center'):
         content(cfg)
@@ -51,6 +40,7 @@ def content(cfg):
     lines = [l["name"] for l in cfg["lines"]]
     defect_types = cfg["quality"]["defects"]
     cur_shift = _shift_now(cfg["shifts"])
+    quality_cfg = cfg.get("quality", {})
 
     with ui.tabs().classes('w-full border-b border-slate-200') as tabs:
         defect_tab = ui.tab('DEFECT LOGGING', icon='report_problem')
@@ -76,7 +66,9 @@ def content(cfg):
                         with ui.row().classes('w-full gap-4 mt-2'):
                             type_v = ui.select(defect_types, label='Defect Type', value=defect_types[0]).props('outlined dense').classes('flex-2')
                             qty_v = ui.number('Defect Qty', value=0, min=0).props('outlined dense').classes('flex-1')
-                            total_v = ui.number('Total Produced', value=300, min=1).props('outlined dense').classes('flex-1')
+                            total_v = ui.number('Total Produced', value=_line_target(cfg, lines[0]), min=1).props('outlined dense').classes('flex-1')
+
+                        line_v.on('update:model-value', lambda e: setattr(total_v, 'value', _line_target(cfg, e.value)))
 
                         # Upload State
                         upload_data = {'path': None}
@@ -101,6 +93,10 @@ def content(cfg):
                             ui.upload(on_upload=handle_upload, label="Click or Drag Image", auto_upload=True) \
                                 .props('flat bordered color=primary').classes('w-full text-xs')
 
+                        notes_v = None
+                        if quality_cfg.get("notes_enabled", True):
+                            notes_v = ui.textarea('Notes / Containment Action').props('outlined rows=3').classes('w-full mt-4')
+
                         def submit_defect():
                             if not op_v.value or not op_v.value.strip():
                                 ui.notify('Please enter operator name.', type='warning')
@@ -108,12 +104,16 @@ def content(cfg):
                             if qty_v.value > total_v.value:
                                 ui.notify('Defect quantity cannot exceed total production.', type='warning')
                                 return
+                            if quality_cfg.get("require_photo") and not upload_data['path']:
+                                ui.notify('A defect photo is required by current settings.', type='warning')
+                                return
                                 
                             insert_defect(
                                 date=date_v.value, shift=shift_v.value, defect_type=type_v.value,
                                 quantity=int(qty_v.value), total_produced=int(total_v.value),
                                 line=line_v.value, operator=op_v.value.strip(),
-                                photo_path=upload_data['path']
+                                photo_path=upload_data['path'],
+                                notes=(notes_v.value or "").strip() if notes_v else ""
                             )
                             
                             # Trigger Alert Logic
@@ -127,6 +127,8 @@ def content(cfg):
 
                             ui.notify(f'Successfully logged {qty_v.value} defects for {line_v.value}', type='positive')
                             qty_v.value = 0
+                            if notes_v:
+                                notes_v.value = ""
                             upload_data['path'] = None # Reset for next entry
                             summary_container.refresh()
 
@@ -252,7 +254,14 @@ def content(cfg):
                                 ui.label('Defect Management').classes('text-sm font-bold uppercase')
                             def_list = ui.textarea('Defect Types (One per line)', value="\n".join(cfg["quality"]["defects"])) \
                                 .classes('w-full h-32').props('outlined')
-                            ui.label('Changing these will affect future logs only.').classes('text-[10px] text-slate-400 italic mt-1')
+                            with ui.row().classes('w-full gap-3 mt-3'):
+                                scrap_target = ui.number('Scrap Alert Target (%)', value=cfg["quality"].get("scrap_target", 2.0), min=0, step=0.1) \
+                                    .props('outlined dense').classes('flex-1')
+                                default_total = ui.number('Default Produced Qty', value=cfg["quality"].get("default_total_produced", 300), min=1) \
+                                    .props('outlined dense').classes('flex-1')
+                            require_photo = ui.switch('Require defect photo before submit', value=cfg["quality"].get("require_photo", False)).classes('mt-2')
+                            notes_enabled = ui.switch('Show notes field on defect form', value=cfg["quality"].get("notes_enabled", True)).classes('mt-1')
+                            ui.label('Changing these settings affects future logs only.').classes('text-[10px] text-slate-400 italic mt-1')
 
                         with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
                             with ui.row().classes('items-center gap-2 mb-6'):
@@ -266,6 +275,7 @@ def content(cfg):
                                 with ui.row().classes('w-full gap-2'):
                                     n_user = ui.input('SMTP User', value=n_cfg.get('smtp_user')).props('outlined dense').classes('flex-2')
                                     n_pass = ui.input('Password', value=n_cfg.get('smtp_pass'), password=True).props('outlined dense').classes('flex-1')
+                                n_port = ui.number('SMTP Port', value=n_cfg.get('smtp_port', 587), min=1, max=65535).props('outlined dense').classes('w-full')
                                 n_target = ui.input('Target Alert Email', value=n_cfg.get('target_email')).props('outlined dense').classes('w-full')
                             
                             ui.label('Alerts are triggered when scrap rates exceed target thresholds.').classes('text-[10px] text-slate-400 italic')
@@ -303,17 +313,34 @@ def content(cfg):
 
                         # Shift Table
                         with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
-                            with ui.row().classes('items-center gap-2 mb-6'):
-                                ui.icon('schedule', size='24px').classes('text-blue-600')
-                                ui.label('Shift Schedule').classes('text-lg font-black uppercase tracking-tighter')
+                            with ui.row().classes('items-center justify-between mb-6'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('schedule', size='24px').classes('text-blue-600')
+                                    ui.label('Shift Schedule').classes('text-lg font-black uppercase tracking-tighter')
+                                ui.button(icon='add', on_click=lambda: add_shift()).props('flat round color=positive')
                             
                             shift_rows = []
+                            def add_shift():
+                                next_num = len(cfg["shifts"]) + 1
+                                cfg["shifts"].append({"name": f"Shift {next_num} (08-16)", "label": f"Shift {next_num}", "start": 8, "end": 16, "active": True})
+                                app.storage.user['config'] = cfg
+                                settings_ui.refresh()
+
+                            def remove_shift(idx):
+                                if len(cfg["shifts"]) > 1:
+                                    cfg["shifts"].pop(idx)
+                                    app.storage.user['config'] = cfg
+                                    settings_ui.refresh()
+                                else:
+                                    ui.notify('At least one shift is required.', type='warning')
+
                             for i, s in enumerate(cfg["shifts"]):
                                 with ui.row().classes('w-full items-center gap-4 py-2 border-b border-slate-100'):
                                     ui.label(f"#{i+1}").classes('text-xs font-bold text-slate-300 w-6')
                                     s_name = ui.input(value=s["name"]).props('outlined dense').classes('flex-[2]')
                                     s_start = ui.number(value=s["start"], min=0, max=23).props('outlined dense suffix="h"').classes('flex-1')
                                     s_end = ui.number(value=s["end"], min=0, max=23).props('outlined dense suffix="h"').classes('flex-1')
+                                    ui.button(icon='delete', on_click=lambda i=i: remove_shift(i)).props('flat dense color=negative').classes('w-8')
                                     shift_rows.append((s_name, s_start, s_end))
 
                         # Line Table
@@ -335,6 +362,8 @@ def content(cfg):
                                     cfg["lines"].pop(idx)
                                     app.storage.user['config'] = cfg
                                     settings_ui.refresh()
+                                else:
+                                    ui.notify('At least one production line is required.', type='warning')
 
                             for i, l in enumerate(cfg["lines"]):
                                 with ui.row().classes('w-full items-center gap-4 py-2 border-b border-slate-100'):
@@ -342,6 +371,44 @@ def content(cfg):
                                     l_target = ui.number(value=l["target"], min=1).props('outlined dense suffix="pcs/sh"').classes('flex-1')
                                     ui.button(icon='delete', on_click=lambda i=i: remove_line(i)).props('flat dense color=negative').classes('w-8')
                                     line_rows.append((l_name, l_target))
+
+                        # SPC Measurement Points
+                        with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):
+                            with ui.row().classes('items-center justify-between mb-6'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('straighten', size='24px').classes('text-purple-600')
+                                    ui.label('SPC Measurement Points').classes('text-lg font-black uppercase tracking-tighter')
+                                ui.button(icon='add', on_click=lambda: add_spc_point()).props('flat round color=positive')
+
+                            spc_rows = []
+                            def add_spc_point():
+                                cfg["spc_points"].append({"point": f"Point-{len(cfg['spc_points'])+1}", "nom": 0.0, "usl": 0.0, "lsl": 0.0})
+                                app.storage.user['config'] = cfg
+                                settings_ui.refresh()
+
+                            def remove_spc_point(idx):
+                                if len(cfg["spc_points"]) > 1:
+                                    cfg["spc_points"].pop(idx)
+                                    app.storage.user['config'] = cfg
+                                    settings_ui.refresh()
+                                else:
+                                    ui.notify('At least one SPC point is required.', type='warning')
+
+                            with ui.row().classes('w-full gap-4 px-1 text-[10px] font-bold text-slate-400 uppercase'):
+                                ui.label('Point').classes('flex-[2]')
+                                ui.label('Nominal').classes('flex-1')
+                                ui.label('USL').classes('flex-1')
+                                ui.label('LSL').classes('flex-1')
+                                ui.label('').classes('w-8')
+
+                            for i, p in enumerate(cfg["spc_points"]):
+                                with ui.row().classes('w-full items-center gap-4 py-2 border-b border-slate-100'):
+                                    p_name = ui.input(value=p["point"]).props('outlined dense').classes('flex-[2]')
+                                    p_nom = ui.number(value=p["nom"], format='%.4f').props('outlined dense').classes('flex-1')
+                                    p_usl = ui.number(value=p["usl"], format='%.4f').props('outlined dense').classes('flex-1')
+                                    p_lsl = ui.number(value=p["lsl"], format='%.4f').props('outlined dense').classes('flex-1')
+                                    ui.button(icon='delete', on_click=lambda i=i: remove_spc_point(i)).props('flat dense color=negative').classes('w-8')
+                                    spc_rows.append((p_name, p_nom, p_usl, p_lsl))
 
                         # Audit Journal (Full Width at Bottom)
                         with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl bg-white'):
@@ -362,49 +429,91 @@ def content(cfg):
                                 ui.label('No system events recorded yet.').classes('text-slate-400 italic text-sm')
 
                 def save_advanced_settings():
+                    defects = [d.strip() for d in def_list.value.split('\n') if d.strip()]
+                    if not defects:
+                        ui.notify('Add at least one defect type.', type='warning')
+                        return
+
+                    cleaned_lines = []
+                    for name_ui, target_ui in line_rows:
+                        name = (name_ui.value or "").strip()
+                        if not name:
+                            ui.notify('Production line names cannot be blank.', type='warning')
+                            return
+                        cleaned_lines.append({
+                            "name": name,
+                            "shifts": 3,
+                            "target": int(target_ui.value or 1)
+                        })
+
+                    cleaned_points = []
+                    for name_ui, nom_ui, usl_ui, lsl_ui in spc_rows:
+                        name = (name_ui.value or "").strip()
+                        if not name:
+                            ui.notify('SPC point names cannot be blank.', type='warning')
+                            return
+                        usl = float(usl_ui.value or 0)
+                        lsl = float(lsl_ui.value or 0)
+                        if usl < lsl:
+                            ui.notify(f'USL must be greater than or equal to LSL for {name}.', type='warning')
+                            return
+                        cleaned_points.append({
+                            "point": name,
+                            "nom": float(nom_ui.value or 0),
+                            "usl": usl,
+                            "lsl": lsl,
+                        })
+
                     # 1. Update Company
                     cfg["company"].update({
-                        "name": c_name.value,
-                        "sector": c_sector.value,
-                        "facility": c_fac.value,
-                        "city": c_city.value,
+                        "name": (c_name.value or "").strip(),
+                        "sector": (c_sector.value or "").strip(),
+                        "facility": (c_fac.value or "").strip(),
+                        "city": (c_city.value or "").strip(),
                         "employees": int(c_emp.value or 0),
-                        "qe": c_qe.value
+                        "qe": (c_qe.value or "").strip()
                     })
                     
                     # 2. Update Defects
-                    cfg["quality"]["defects"] = [d.strip() for d in def_list.value.split('\n') if d.strip()]
+                    cfg["quality"]["defects"] = defects
+                    cfg["quality"]["scrap_target"] = float(scrap_target.value or 0)
+                    cfg["quality"]["default_total_produced"] = int(default_total.value or 1)
+                    cfg["quality"]["require_photo"] = bool(require_photo.value)
+                    cfg["quality"]["notes_enabled"] = bool(notes_enabled.value)
                     
                     # 3. Update Shifts
                     new_shifts = []
                     for name_ui, start_ui, end_ui in shift_rows:
+                        name_val = (name_ui.value or "").strip()
+                        if not name_val:
+                            ui.notify('Shift names cannot be blank.', type='warning')
+                            return
                         new_shifts.append({
-                            "name": name_ui.value,
-                            "start": int(start_ui.value),
-                            "end": int(end_ui.value),
+                            "name": name_val,
+                            "label": name_val.split("(")[0].strip() if "(" in name_val else name_val,
+                            "start": int(start_ui.value or 0),
+                            "end": int(end_ui.value or 0),
                             "active": True
                         })
                     cfg["shifts"] = new_shifts
                     
                     # 4. Update Lines
-                    new_lines = []
-                    for name_ui, target_ui in line_rows:
-                        new_lines.append({
-                            "name": name_ui.value,
-                            "shifts": 3,
-                            "target": int(target_ui.value)
-                        })
-                    cfg["lines"] = new_lines
+                    cfg["lines"] = cleaned_lines
+
+                    # 5. Update SPC Points
+                    cfg["spc_points"] = cleaned_points
                     
-                    # 5. Update Notifications
+                    # 6. Update Notifications
                     cfg["notifications"] = {
                         "enabled": n_enabled.value,
                         "smtp_server": n_server.value,
+                        "smtp_port": int(n_port.value or 587),
                         "smtp_user": n_user.value,
                         "smtp_pass": n_pass.value,
                         "target_email": n_target.value
                     }
                     
+                    cfg = save_config(cfg)
                     app.storage.user['config'] = cfg
                     ui.notify('Corporate Data Successfully Saved', type='positive', icon='check_circle')
                     ui.timer(1.0, ui.navigate.to, once=True) # Refresh page logic

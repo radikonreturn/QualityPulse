@@ -195,7 +195,7 @@ def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
         (date, shift, operator, defect_type, quantity, total_produced, line, photo_path, notes)
     )
     last_id = cur.lastrowid
-    log_action(operator or "System", "CREATE", "defects", last_id, f"Entry: {defect_type} ({quantity}) on {line}")
+    log_action(operator or "System", "CREATE", "defects", last_id, f"Entry: {defect_type} ({quantity}) on {line}", conn=conn)
     conn.commit()
     conn.close()
 
@@ -204,16 +204,20 @@ def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
 # AUDIT LOGS
 # ─────────────────────────────────────────────
 
-def log_action(user: str, action: str, table_affected: str, record_id: int = None, details: str = ""):
+def log_action(user: str, action: str, table_affected: str, record_id: int = None, details: str = "", conn = None):
     """Record an action in the system audit log."""
     from datetime import datetime
-    conn = get_connection()
+    should_close = False
+    if conn is None:
+        conn = get_connection()
+        should_close = True
     conn.execute(
         "INSERT INTO audit_logs (timestamp, user, action, table_affected, record_id, details) VALUES (?,?,?,?,?,?)",
         (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user, action, table_affected, record_id, details)
     )
-    conn.commit()
-    conn.close()
+    if should_close:
+        conn.commit()
+        conn.close()
 
 def get_audit_logs(limit: int = 200) -> list[dict]:
     conn = get_connection()
@@ -256,7 +260,7 @@ def insert_measurement(timestamp: str, line: str, measurement_point: str,
         (timestamp, line, measurement_point, value, nominal, tolerance_upper, tolerance_lower)
     )
     last_id = cur.lastrowid
-    log_action("System", "CREATE", "measurements", last_id, f"Inspection: {measurement_point} -> {value}")
+    log_action("System", "CREATE", "measurements", last_id, f"Inspection: {measurement_point} -> {value}", conn=conn)
     conn.commit()
     conn.close()
 
@@ -299,7 +303,7 @@ def insert_capa(created_date, title, description, root_cause, corrective_action,
          owner, due_date, criticality, status, closed_date)
     )
     last_id = cur.lastrowid
-    log_action(owner, "CREATE", "capa", last_id, f"Action: {title}")
+    log_action(owner, "CREATE", "capa", last_id, f"Action: {title}", conn=conn)
     conn.commit()
     conn.close()
 
