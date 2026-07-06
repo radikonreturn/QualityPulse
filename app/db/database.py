@@ -1,23 +1,48 @@
-import os
-import sys
+import functools
+import logging
 import sqlite3
-from pathlib import Path
 
-from pathlib import Path
-from utils.paths import get_app_storage_dir
+from nicegui import app
 
-DB_PATH = get_app_storage_dir() / "quality.db"
+from core.auth import DEFAULT_TENANT_ID
+from core.db import get_db, get_tenant_db_path
 
-
-def get_connection() -> sqlite3.Connection:
-    """Return a SQLite connection with row_factory set to Row."""
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+logger = logging.getLogger(__name__)
+DB_PATH = get_tenant_db_path(DEFAULT_TENANT_ID)
 
 
+def current_tenant_id() -> str:
+    try:
+        return app.storage.user.get("tenant_id") or DEFAULT_TENANT_ID
+    except RuntimeError:
+        return DEFAULT_TENANT_ID
+
+
+def db_operation(default=None):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                logger.exception("Database operation failed: %s", func.__name__)
+                if isinstance(default, list):
+                    return []
+                return default
+        return wrapper
+    return decorator
+
+
+def get_connection(tenant_id: str = None) -> sqlite3.Connection:
+    """Return a tenant-scoped SQLite connection."""
+    try:
+        return get_db(tenant_id or current_tenant_id())
+    except Exception:
+        logger.exception("Failed to create tenant database connection")
+        raise
+
+
+@db_operation()
 def init_db():
     """Create all tables if they don't exist."""
     conn = get_connection()
@@ -92,6 +117,7 @@ def init_db():
     migrate_db()
 
 
+@db_operation()
 def migrate_db():
     """Apply schema updates (alter table) if columns are missing."""
     import re
@@ -164,6 +190,7 @@ def migrate_db():
 # DEFECTS
 # ─────────────────────────────────────────────
 
+@db_operation(default=[])
 def get_defects(start_date: str = None, end_date: str = None, line: str = None) -> list[dict]:
     conn = get_connection()
     query = "SELECT * FROM defects WHERE 1=1"
@@ -183,6 +210,7 @@ def get_defects(start_date: str = None, end_date: str = None, line: str = None) 
     return [dict(r) for r in rows]
 
 
+@db_operation()
 def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
                   total_produced: int, line: str, operator: str = None, 
                   photo_path: str = None, notes: str = ""):
@@ -204,6 +232,7 @@ def insert_defect(date: str, shift: str, defect_type: str, quantity: int,
 # AUDIT LOGS
 # ─────────────────────────────────────────────
 
+@db_operation()
 def log_action(user: str, action: str, table_affected: str, record_id: int = None, details: str = "", conn = None):
     """Record an action in the system audit log."""
     from datetime import datetime
@@ -219,6 +248,7 @@ def log_action(user: str, action: str, table_affected: str, record_id: int = Non
         conn.commit()
         conn.close()
 
+@db_operation(default=[])
 def get_audit_logs(limit: int = 200) -> list[dict]:
     conn = get_connection()
     rows = conn.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)).fetchall()
@@ -230,6 +260,7 @@ def get_audit_logs(limit: int = 200) -> list[dict]:
 # MEASUREMENTS
 # ─────────────────────────────────────────────
 
+@db_operation(default=[])
 def get_measurements(measurement_point: str = None, limit: int = 100) -> list[dict]:
     conn = get_connection()
     query = "SELECT * FROM measurements"
@@ -244,6 +275,7 @@ def get_measurements(measurement_point: str = None, limit: int = 100) -> list[di
     return [dict(r) for r in rows]
 
 
+@db_operation(default=[])
 def get_measurement_points() -> list[str]:
     conn = get_connection()
     rows = conn.execute("SELECT DISTINCT measurement_point FROM measurements ORDER BY measurement_point").fetchall()
@@ -251,6 +283,7 @@ def get_measurement_points() -> list[str]:
     return [r[0] for r in rows]
 
 
+@db_operation()
 def insert_measurement(timestamp: str, line: str, measurement_point: str,
                         value: float, nominal: float, tolerance_upper: float, tolerance_lower: float):
     conn = get_connection()
@@ -269,6 +302,7 @@ def insert_measurement(timestamp: str, line: str, measurement_point: str,
 # CAPA
 # ─────────────────────────────────────────────
 
+@db_operation(default=[])
 def get_all_capa(status_filter: list = None, criticality_filter: list = None, owner_search: str = "") -> list[dict]:
     conn = get_connection()
     query = "SELECT * FROM capa WHERE 1=1"
@@ -290,6 +324,7 @@ def get_all_capa(status_filter: list = None, criticality_filter: list = None, ow
     return [dict(r) for r in rows]
 
 
+@db_operation()
 def insert_capa(created_date, title, description, root_cause, corrective_action,
                 owner, due_date, criticality, status="Open", closed_date=None):
     conn = get_connection()
@@ -308,6 +343,7 @@ def insert_capa(created_date, title, description, root_cause, corrective_action,
     conn.close()
 
 
+@db_operation()
 def update_capa_status(capa_id: int, new_status: str, closed_date: str = None):
     conn = get_connection()
     conn.execute(
@@ -322,6 +358,7 @@ def update_capa_status(capa_id: int, new_status: str, closed_date: str = None):
 # FMEA
 # ─────────────────────────────────────────────
 
+@db_operation(default=[])
 def get_all_fmea() -> list[dict]:
     conn = get_connection()
     rows = conn.execute(
@@ -332,6 +369,7 @@ def get_all_fmea() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@db_operation()
 def insert_fmea(process_step, failure_mode, failure_effect, severity, occurrence, detection,
                 current_controls, recommended_action, responsible, status="Open"):
     conn = get_connection()
@@ -347,6 +385,7 @@ def insert_fmea(process_step, failure_mode, failure_effect, severity, occurrence
     conn.close()
 
 
+@db_operation()
 def update_fmea(fmea_id: int, **kwargs):
     conn = get_connection()
     allowed = {"process_step", "failure_mode", "failure_effect", "severity", "occurrence",
@@ -361,6 +400,7 @@ def update_fmea(fmea_id: int, **kwargs):
     conn.close()
 
 
+@db_operation(default=[])
 def get_lines() -> list[str]:
     conn = get_connection()
     rows = conn.execute("SELECT DISTINCT line FROM defects ORDER BY line").fetchall()

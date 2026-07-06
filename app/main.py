@@ -2,19 +2,17 @@ import os
 import sys
 import importlib
 from nicegui import ui
-from fastapi.responses import RedirectResponse
 
 # Ensure app directory is on path
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
-from db.database import init_db
-from db.seed import run as seed_run
+from core.auth import ensure_default_admin
 from utils.paths import get_app_storage_dir
 
-# Initialize Database
-init_db()
+# Initialize master auth database and bootstrap tenant
+ensure_default_admin()
 
 # Layout components
 from components.layout import frame
@@ -55,24 +53,11 @@ def handle_exception(e: Exception):
 app.on_exception(handle_exception)
 
 if __name__ in {"__main__", "__mp_main__"}:
-    # Global Security Middleware
-    unrestricted_pages = ['/login', '/static', '/_nicegui']
-    
-    @app.middleware
-    async def auth_middleware(request, call_next):
-        if not app.storage.user.get('authenticated', False):
-            if not any(request.url.path.startswith(p) for p in unrestricted_pages):
-                return RedirectResponse('/login')
-        return await call_next(request)
-
-    # Run the application
-    native_mode = os.getenv('QP_WEB_MODE', '0') != '1'
-    
     ui.run(
         title="QualityPulse — Intelligent Quality Management System",
         favicon=os.path.join(APP_DIR, 'assets', 'icon.png'),
-        native=native_mode,
-        window_size=(1440, 900),
+        host="0.0.0.0",
+        port=8080,
         storage_secret="qp_secret_key_2026",
         reload=False
     )

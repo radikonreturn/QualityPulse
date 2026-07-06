@@ -1,16 +1,16 @@
 from nicegui import ui
 import pandas as pd
-import sqlite3
 import os
 from datetime import datetime
-from db.database import DB_PATH, get_audit_logs
+from db.database import get_audit_logs, get_connection
 from components.layout import frame
+from core.auth import auth_guard
 from utils.export import format_excel_sheet
 from utils.calculations import calculate_scrap_rate, count_overdue_capa
 from nicegui import app
 
 def get_db_connection():
-    return sqlite3.connect(str(DB_PATH))
+    return get_connection()
 
 def create_excel_export() -> str:
     """Create a multi-sheet Excel report and return the persistent file path."""
@@ -88,6 +88,8 @@ def create_excel_export() -> str:
 
 @ui.page('/data_export')
 def data_export_page():
+    if not auth_guard():
+        return
     with frame('Data Export Center'):
         content()
 

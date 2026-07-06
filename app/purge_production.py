@@ -1,6 +1,9 @@
 import os
 import sqlite3
 
+from core.auth import DEFAULT_TENANT_ID
+from core.db import get_tenant_db_path
+
 def purge_location(db_path, upload_dir, label):
     if not os.path.exists(db_path):
         print(f"Skipping {label}: DB not found at {db_path}")
@@ -48,16 +51,10 @@ def run_purge():
     print("QualityPulse — Global Production Purge Initiated")
     print("=" * 50)
     
-    # 1. Project Local
-    local_db = os.path.join(os.getcwd(), 'app', 'quality.db')
+    # 1. Default tenant database
+    local_db = str(get_tenant_db_path(DEFAULT_TENANT_ID))
     local_upload = os.path.join(os.getcwd(), 'app', 'uploads')
-    purge_location(local_db, local_upload, "DEVELOPMENT STATE")
-    
-    # 2. APPDATA (Production State)
-    appdata_base = os.path.join(os.environ.get("APPDATA", ""), "QualityPulse")
-    appdata_db = os.path.join(appdata_base, "quality.db")
-    appdata_upload = os.path.join(appdata_base, "uploads")
-    purge_location(appdata_db, appdata_upload, "PRODUCTION/APPDATA STATE")
+    purge_location(local_db, local_upload, "DEFAULT TENANT STATE")
     
     print("=" * 50)
     print("SUCCESS: All system records and sample files have been wiped.")

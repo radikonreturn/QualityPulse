@@ -12,10 +12,13 @@ from components.charts import scrap_trend_chart, defect_donut_chart, oee_gauge
 from components.icons import SCRAP, OEE, ALERT, get_svg
 from components.layout import frame
 from components.tour_component import guided_tour
+from core.auth import auth_guard
 from utils.insights import generate_quality_insights, get_defect_heatmap_data
 
 @ui.page('/')
 def dashboard_page():
+    if not auth_guard():
+        return
     with frame('Analytical Dashboard'):
         content()
 

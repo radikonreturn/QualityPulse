@@ -6,9 +6,12 @@ from components.charts import spc_chart
 from components.kpi_card import cpk_card
 
 from components.layout import frame
+from core.auth import auth_guard
 
 @ui.page('/spc')
 def spc_page():
+    if not auth_guard():
+        return
     with frame('Statistical Process Control'):
         content()
 

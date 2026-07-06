@@ -3,9 +3,12 @@ from datetime import datetime
 from db.database import get_all_capa, insert_capa, update_capa_status
 
 from components.layout import frame
+from core.auth import auth_guard
 
 @ui.page('/capa')
 def capa_page():
+    if not auth_guard():
+        return
     with frame('CAPA Management'):
         content()
 

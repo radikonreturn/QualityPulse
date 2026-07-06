@@ -1,6 +1,7 @@
 from nicegui import ui
 from db.database import get_all_fmea, insert_fmea
 from components.charts import fmea_heatmap
+from core.auth import auth_guard
 
 def rpn_badge(rpn: int):
     """Helper to render a colored badge based on RPN."""
@@ -17,6 +18,8 @@ from components.layout import frame
 
 @ui.page('/fmea')
 def fmea_page():
+    if not auth_guard():
+        return
     with frame('FMEA Risk Matrix'):
         content()
 

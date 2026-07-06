@@ -5,9 +5,12 @@ from components.charts import pareto_chart
 import pandas as pd
 
 from components.layout import frame
+from core.auth import auth_guard
 
 @ui.page('/pareto')
 def pareto_page():
+    if not auth_guard():
+        return
     with frame('Pareto Analysis'):
         content()
 

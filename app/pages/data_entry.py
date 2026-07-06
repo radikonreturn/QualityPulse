@@ -7,6 +7,7 @@ from db.database import (
 from utils.backup import create_backup, restore_backup
 from utils.config import load_config, normalize_config, save_config
 from components.layout import frame
+from core.auth import auth_guard
 
 def _shift_now(shift_cfg) -> str:
     if not shift_cfg:
@@ -29,6 +30,8 @@ def _line_target(cfg, line_name: str) -> int:
 
 @ui.page('/data_entry')
 def data_entry_page():
+    if not auth_guard():
+        return
     cfg = normalize_config(app.storage.user.get('config') or load_config())
     app.storage.user['config'] = cfg
     
@@ -287,29 +290,17 @@ def content(cfg):
                                 ui.icon('cloud_upload', size='24px').classes('text-blue-400')
                                 ui.label('Data Portability').classes('text-lg font-black uppercase tracking-tighter')
                             
-                            ui.label('Export your entire database and photo gallery into a portable backup file, or restore a previous session.').classes('text-xs text-slate-400 mb-6')
+                            ui.label('Export your entire database and photo gallery into a portable backup file.').classes('text-xs text-slate-400 mb-6')
                             
-                            with ui.row().classes('w-full gap-4'):
-                                def do_export():
-                                    import tempfile
-                                    with tempfile.NamedTemporaryFile(suffix='.qpbackup', delete=False) as tmp:
-                                        create_backup(tmp.name)
-                                        ui.download(tmp.name, filename=f"QualityPulse_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.qpbackup")
-                                    ui.notify('Backup exported successfully.', type='positive')
+                            def do_export():
+                                import tempfile
+                                with tempfile.NamedTemporaryFile(suffix='.qpbackup', delete=False) as tmp:
+                                    create_backup(tmp.name)
+                                    ui.download(tmp.name, filename=f"QualityPulse_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.qpbackup")
+                                ui.notify('Backup exported successfully.', type='positive')
 
-                                ui.button('DOWNLOAD FULL BACKUP', on_click=do_export, icon='download') \
-                                    .props('no-caps outline').classes('flex-1 text-white border-white/20')
-                                
-                                async def handle_import(e):
-                                    import tempfile
-                                    with tempfile.NamedTemporaryFile(suffix='.qpbackup', delete=False) as tmp:
-                                        tmp.write(e.content.read())
-                                        restore_backup(tmp.name)
-                                    ui.notify('System Restored! Restarting app...', type='warning', position='top')
-                                    ui.timer(2.0, ui.navigate.to, once=True) # Full refresh
-
-                                ui.upload(on_upload=handle_import, label='Import .qpbackup', auto_upload=True) \
-                                    .props('flat bordered color=white').classes('flex-1 h-12 text-xs')
+                            ui.button('DOWNLOAD FULL BACKUP', on_click=do_export, icon='download') \
+                                .props('no-caps outline').classes('w-full text-white border-white/20')
 
                         # Shift Table
                         with ui.card().classes('w-full p-8 shadow-sm border border-slate-200 rounded-2xl'):

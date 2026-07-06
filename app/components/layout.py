@@ -53,8 +53,8 @@ def frame(page_title: str):
                 ui.icon('notifications', size='20px').classes('text-slate-400 cursor-pointer')
                 
                 def logout():
-                    from nicegui import app
-                    app.storage.user['authenticated'] = False
+                    from core.auth import logout_user
+                    logout_user()
                     ui.navigate.to('/login')
                 
                 ui.button(on_click=logout, icon='logout').props('flat round dense color=negative').classes('hover:bg-red-50 transition-all')
