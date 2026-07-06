@@ -14,6 +14,6 @@ COPY . /app
 
 RUN mkdir -p /app/data/tenants
 
-EXPOSE 8080
+EXPOSE 8888
 
 CMD ["python", "app/main.py"]

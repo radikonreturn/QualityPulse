@@ -57,7 +57,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         title="QualityPulse — Intelligent Quality Management System",
         favicon=os.path.join(APP_DIR, 'assets', 'icon.svg'),
         host="0.0.0.0",
-        port=8080,
+        port=8888,
         storage_secret="qp_secret_key_2026",
         reload=False
     )
