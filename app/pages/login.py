@@ -20,11 +20,9 @@ def login_page():
 
     with ui.column().classes('absolute-center w-full items-center p-4'):
         with ui.card().classes('w-full max-w-md p-10 shadow-2xl border-none backdrop-blur-md bg-white/70 rounded-3xl'):
-            with ui.column().classes('w-full items-center gap-6'):
-                ui.avatar('security', color='blue-600', text_color='white', size='64px').classes('shadow-lg shadow-blue-200')
-                with ui.column().classes('items-center gap-0'):
-                    ui.label('QualityPulse').classes('text-3xl font-black text-slate-900 tracking-tighter')
-                    ui.label('SAAS TENANT LOGIN').classes('text-[10px] font-black tracking-[0.3em] text-blue-500 uppercase')
+            with ui.column().classes('w-full items-center gap-4'):
+                ui.image('/assets/logo.svg').classes('w-64 h-auto mx-auto')
+                ui.label('SAAS TENANT LOGIN').classes('text-[10px] font-black tracking-[0.3em] text-blue-600 uppercase')
 
                 ui.label('Sign in with your company account.').classes('text-center text-slate-500 text-sm font-medium mt-2 px-4')
 

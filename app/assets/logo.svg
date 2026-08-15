@@ -1,0 +1,34 @@
+<svg width="800" height="240" viewBox="0 0 800 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(10, 10) scale(0.43)">
+    <!-- Q Mark -->
+    <path fill-rule="evenodd" clip-rule="evenodd" d="
+      M 256,40
+      C 137.26,40 40,137.26 40,256
+      C 40,374.74 137.26,472 256,472
+      C 300.9,472 342.3,458.2 376.1,434.6
+      L 434,472
+      H 476
+      L 426.8,397.6
+      C 455.1,357.7 472,308.8 472,256
+      C 472,137.26 374.74,40 256,40
+      Z
+      M 256,112
+      C 176.47,112 112,176.47 112,256
+      C 112,335.53 176.47,400 256,400
+      C 292.1,400 325,386.6 350.2,364.5
+      L 308,300
+      H 385
+      L 416.7,347.8
+      C 424,320 428,289.4 428,256
+      C 428,176.47 363.53,112 256,112
+      Z
+    " fill="#0D1B2A"/>
+    <path d="M 148,256 H 204 L 244,142 L 286,336 L 326,256 H 354" stroke="#0066FF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="372" cy="256" r="19" fill="#0066FF"/>
+  </g>
+
+  <!-- Typography -->
+  <text x="240" y="145" font-family="Inter, -apple-system, sans-serif" font-weight="800" font-size="88" letter-spacing="-3">
+    <tspan fill="#0D1B2A">Quality</tspan><tspan fill="#0066FF">Pulse</tspan>
+  </text>
+</svg>

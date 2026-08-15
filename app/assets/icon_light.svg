@@ -1,5 +1,4 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Q Outer Ring & Tail -->
   <path fill-rule="evenodd" clip-rule="evenodd" d="
     M 256,40
     C 137.26,40 40,137.26 40,256
@@ -21,11 +20,8 @@
     C 424,320 428,289.4 428,256
     C 428,176.47 363.53,112 256,112
     Z
-  " fill="#0D1B2A"/>
+  " fill="#FFFFFF"/>
 
-  <!-- EKG Pulse Line -->
   <path d="M 148,256 H 204 L 244,142 L 286,336 L 326,256 H 354" stroke="#0066FF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Pulse Line Endpoint Dot -->
   <circle cx="372" cy="256" r="19" fill="#0066FF"/>
 </svg>
