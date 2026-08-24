@@ -7,6 +7,7 @@ from components.layout import frame
 from core.auth import auth_guard
 from utils.export import format_excel_sheet
 from utils.calculations import calculate_scrap_rate, count_overdue_capa
+from utils.paths import get_app_storage_dir
 from nicegui import app
 
 def get_db_connection():
@@ -16,8 +17,8 @@ def create_excel_export() -> str:
     """Create a multi-sheet Excel report and return the persistent file path."""
     conn = get_db_connection()
     
-    # Ensure a persistent 'exports' directory exists in the app root
-    export_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'exports')
+    # Ensure a persistent 'exports' directory exists in the storage directory
+    export_dir = os.path.join(str(get_app_storage_dir()), 'exports')
     os.makedirs(export_dir, exist_ok=True)
     
     filename = f"QualityPulse_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"

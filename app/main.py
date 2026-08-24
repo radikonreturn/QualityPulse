@@ -26,6 +26,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.add_static_files('/assets', os.path.join(APP_DIR, 'assets'))
 app.add_static_files('/uploads', UPLOAD_DIR)
 
+# Minimal Health Check Endpoint for Docker / Coolify / Reverse Proxy
+@app.get('/health')
+def health_check():
+    return {"status": "healthy", "service": "QualityPulse"}
+
 # Import pages to register routes
 page_modules = [
     "pages.dashboard",
@@ -53,11 +58,15 @@ def handle_exception(e: Exception):
 app.on_exception(handle_exception)
 
 if __name__ in {"__main__", "__mp_main__"}:
+    port = int(os.environ.get("PORT", "8888"))
+    storage_secret = os.environ.get("STORAGE_SECRET", os.environ.get("SECRET_KEY", "qp_secret_key_2026"))
     ui.run(
         title="QualityPulse — Intelligent Quality Management System",
         favicon=os.path.join(APP_DIR, 'assets', 'icon.svg'),
         host="0.0.0.0",
-        port=8888,
-        storage_secret="qp_secret_key_2026",
-        reload=False
+        port=port,
+        storage_secret=storage_secret,
+        reload=False,
+        show=False,
+        forwarded_allow_ips="*"
     )

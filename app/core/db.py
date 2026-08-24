@@ -1,3 +1,4 @@
+import os
 import logging
 import re
 import sqlite3
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 APP_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = APP_DIR.parent
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = Path(os.environ["QP_DATA_DIR"]) if "QP_DATA_DIR" in os.environ else PROJECT_ROOT / "data"
 TENANT_DIR = DATA_DIR / "tenants"
 MASTER_DB_PATH = DATA_DIR / "master.db"
 
